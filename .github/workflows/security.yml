@@ -58,16 +58,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
+      - name: Detect Go module
+        id: detect
+        run: |
+          # osv-scanner exits non-zero with "No package sources found" if there is
+          # nothing to scan. The quantcli org is Go-only today, so gate on go.mod.
+          # If a non-Go manifest (package.json, requirements.txt, Cargo.toml, …) is
+          # ever introduced, broaden this check.
+          if [ -f go.mod ]; then
+            echo "has_manifests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_manifests=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No go.mod found; skipping osv-scanner."
+          fi
+
       - name: Set up Go
+        if: steps.detect.outputs.has_manifests == 'true'
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version: stable
           cache: false
 
       - name: Install osv-scanner
+        if: steps.detect.outputs.has_manifests == 'true'
         run: go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest
 
       - name: Run osv-scanner
+        if: steps.detect.outputs.has_manifests == 'true'
         run: osv-scanner scan source --recursive .
 
   license-policy:

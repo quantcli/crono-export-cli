@@ -1,0 +1,141 @@
+name: security
+
+# Supply-chain and license-policy gate.
+# Source of truth lives in quantcli/common; this file is the in-repo copy.
+# When updating, propagate the change back to quantcli/common (and the other export-clis).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Default-deny at workflow level; each job re-grants only what it needs.
+permissions: {}
+
+jobs:
+  govulncheck:
+    name: govulncheck (Go vuln DB)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Detect Go module
+        id: detect
+        run: |
+          if [ -f go.mod ]; then
+            echo "has_go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_go=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No go.mod present; skipping govulncheck."
+          fi
+
+      - name: Set up Go
+        if: steps.detect.outputs.has_go == 'true'
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install govulncheck
+        if: steps.detect.outputs.has_go == 'true'
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        if: steps.detect.outputs.has_go == 'true'
+        run: govulncheck ./...
+
+  osv-scanner:
+    name: osv-scanner (transitive vulns)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Install osv-scanner
+        run: go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest
+
+      - name: Run osv-scanner
+        run: osv-scanner scan source --recursive .
+
+  license-policy:
+    name: license policy (allowlist)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      # Policy: every direct + transitive Go dep must resolve to one of these SPDX ids.
+      # See quantcli/common SECURITY.md "Supply-chain policy" for the rationale.
+      ALLOWED_LICENSES: "Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,MPL-2.0,ISC,Unlicense"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Detect Go module
+        id: detect
+        run: |
+          if [ -f go.mod ]; then
+            echo "has_go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_go=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No go.mod present; skipping license-policy check."
+          fi
+
+      - name: Set up Go
+        if: steps.detect.outputs.has_go == 'true'
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install go-licenses
+        if: steps.detect.outputs.has_go == 'true'
+        run: go install github.com/google/go-licenses@latest
+
+      - name: Check licenses against allowlist
+        if: steps.detect.outputs.has_go == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          report=$(mktemp)
+          # go-licenses csv emits: module,license-url,license-id (one per line).
+          # Warnings (e.g. license-url not found) go to stderr and are non-fatal here.
+          go-licenses csv ./... > "$report"
+
+          IFS=',' read -ra ALLOWED <<< "$ALLOWED_LICENSES"
+          is_allowed() {
+            local needle="$1"
+            for a in "${ALLOWED[@]}"; do
+              if [ "$needle" = "$a" ]; then return 0; fi
+            done
+            return 1
+          }
+
+          bad=0
+          while IFS=',' read -r module url license; do
+            [ -z "$module" ] && continue
+            if ! is_allowed "$license"; then
+              echo "::error::Disallowed license: module=$module license=$license"
+              bad=1
+            fi
+          done < "$report"
+
+          if [ "$bad" -ne 0 ]; then
+            echo "::error::License policy violated. Allowlist: ${ALLOWED_LICENSES}"
+            echo "::error::See quantcli/common SECURITY.md for the policy and how to request an exception."
+            exit 1
+          fi
+
+          echo "All dependency licenses are within policy."

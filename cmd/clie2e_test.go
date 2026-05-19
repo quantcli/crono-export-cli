@@ -42,8 +42,20 @@ func TestMain(m *testing.M) {
 
 func runCLI(t *testing.T, env []string, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
+	// Redirect every cache-dir env var the binary might consult to a
+	// per-test temp dir, mirroring session_test.go's in-process
+	// redirect. Without this the subprocess inherits the developer's
+	// real HOME/XDG_CACHE_HOME/LOCALAPPDATA and can write a fake
+	// session into ~/.cache/crono-export/, clobbering the real cache
+	// and letting a pre-existing real session mask the fake-login path.
+	cacheDir := t.TempDir()
+	isolation := []string{
+		"HOME=" + cacheDir,
+		"XDG_CACHE_HOME=" + cacheDir,
+		"LOCALAPPDATA=" + cacheDir,
+	}
 	cmd := exec.Command(binPath, args...)
-	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = append(append(os.Environ(), isolation...), env...)
 	var sout, serr bytes.Buffer
 	cmd.Stdout = &sout
 	cmd.Stderr = &serr

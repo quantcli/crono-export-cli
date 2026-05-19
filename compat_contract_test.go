@@ -17,7 +17,20 @@ import (
 
 	"github.com/quantcli/common/compat"
 	"github.com/quantcli/common/compat/dates"
+	"github.com/quantcli/common/compat/formats"
 )
+
+// cronoSubcommands is the §3/§4 surface for crono — each subcommand
+// owns its own --since/--until and --format flags. Shared between the
+// dates and formats bundles so a single source-of-truth list keeps
+// the two suites in sync.
+var cronoSubcommands = []string{
+	"biometrics",
+	"exercises",
+	"nutrition",
+	"servings",
+	"notes",
+}
 
 func TestContractDates(t *testing.T) {
 	bin := os.Getenv("CRONO_EXPORT_BIN")
@@ -29,13 +42,32 @@ func TestContractDates(t *testing.T) {
 	// subcommand under a `subcommand=NAME/...` subtree so any single
 	// regression surfaces as a named subtest failure.
 	dates.RunContract(t, compat.Runner{
-		Binary: bin,
-		Subcommands: []string{
-			"biometrics",
-			"exercises",
-			"nutrition",
-			"servings",
-			"notes",
-		},
+		Binary:      bin,
+		Subcommands: cronoSubcommands,
+	})
+}
+
+func TestContractFormats(t *testing.T) {
+	bin := os.Getenv("CRONO_EXPORT_BIN")
+	if bin == "" {
+		t.Skip("CRONO_EXPORT_BIN not set; skipping compat suite")
+	}
+	// crono implements --format markdown (default) and --format json
+	// today; CSV is not yet wired (see cmd/format.go chosenFormat).
+	// SupportedFormats: ["markdown","json"] skips CSVHasHeader with a
+	// named reason rather than failing it.
+	//
+	// SkipDataPath: true opts out of JSONIsArray / CSVHasHeader /
+	// DefaultIsMarkdown — crono's data path requires
+	// CRONOMETER_USERNAME/PASSWORD which the compat CI job does not
+	// provide, so the data-path subtests would fail at "not logged in"
+	// before the codec assertions could run. The parse-level subtests
+	// (HelpDocumentsFormatFlag, UnknownFormatFails,
+	// FlagValidationIsHermetic) still attest the §4 surface.
+	formats.RunContract(t, compat.Runner{
+		Binary:           bin,
+		Subcommands:      cronoSubcommands,
+		SupportedFormats: []string{"markdown", "json"},
+		SkipDataPath:     true,
 	})
 }

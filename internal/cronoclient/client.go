@@ -35,6 +35,10 @@ type Client struct {
 // case — even with a cache hit we hold the password so the wrapper
 // can transparently re-login if the cached session turns out to be
 // stale.
+//
+// If CRONOMETER_BASE_URL is set, it overrides the production Cronometer
+// host. This is intended for the agent-runnable E2E tests in this repo;
+// real users never need to set it.
 func NewLoggedIn(ctx context.Context) (*Client, error) {
 	user := os.Getenv("CRONOMETER_USERNAME")
 	pass := os.Getenv("CRONOMETER_PASSWORD")
@@ -42,6 +46,9 @@ func NewLoggedIn(ctx context.Context) (*Client, error) {
 		return nil, fmt.Errorf("CRONOMETER_USERNAME and CRONOMETER_PASSWORD must be set")
 	}
 	inner := cronoapi.NewClient(nil)
+	if base := os.Getenv("CRONOMETER_BASE_URL"); base != "" {
+		inner.SetBaseURL(base)
+	}
 	c := &Client{inner: inner, user: user, pass: pass}
 
 	if cacheEnabled() {

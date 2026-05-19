@@ -17,8 +17,8 @@ import (
 const DefaultGWTPermutation = "7B121DC5483BF272B1BC1916DA9FA963"
 
 const (
-	gwtModuleBase = "https://cronometer.com/cronometer/"
-	gwtServiceIfc = "com.cronometer.shared.rpc.CronometerService"
+	gwtModuleBase  = "https://cronometer.com/cronometer/"
+	gwtServiceIfc  = "com.cronometer.shared.rpc.CronometerService"
 	gwtContentType = "text/x-gwt-rpc; charset=UTF-8"
 )
 
@@ -88,10 +88,10 @@ func logoutBody(permutation, authToken string) string {
 // exception. parseGwtOK strips the //OK prefix and returns the inner
 // payload (everything between the [ and the trailing ]).
 var (
-	gwtOKRe       = regexp.MustCompile(`^//OK\[(.*)\]\s*$`)
-	gwtUserIDRe   = regexp.MustCompile(`^//OK\[(\d+),`)
-	gwtAuthTokRe  = regexp.MustCompile(`"([0-9a-fA-F]{32})"`)
-	gwtNonceRe    = regexp.MustCompile(`\["([0-9a-fA-F]{32})"\]`)
+	gwtOKRe      = regexp.MustCompile(`^//OK\[(.*)\]\s*$`)
+	gwtUserIDRe  = regexp.MustCompile(`^//OK\[(\d+),`)
+	gwtAuthTokRe = regexp.MustCompile(`"([0-9a-fA-F]{32})"`)
+	gwtNonceRe   = regexp.MustCompile(`\["([0-9a-fA-F]{32})"\]`)
 )
 
 // parseAuthenticateResponse pulls (userID, sessionAuthToken) out of the

@@ -10,10 +10,10 @@ func TestResolveDateRange(t *testing.T) {
 	day := func(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
 
 	cases := []struct {
-		name              string
-		since, until      string
+		name               string
+		since, until       string
 		wantStart, wantEnd time.Time
-		wantEmpty         bool
+		wantEmpty          bool
 	}{
 		{
 			name:      "both empty defaults to 7d ending today",

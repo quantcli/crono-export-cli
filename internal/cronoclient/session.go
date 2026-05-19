@@ -11,10 +11,16 @@ import (
 	"github.com/quantcli/crono-export-cli/internal/cronoapi"
 )
 
+// cacheSchemaVersion is bumped whenever the on-disk session shape
+// changes incompatibly.  An older cache is silently ignored (treated
+// as a miss) so existing users transparently re-login on upgrade.
+const cacheSchemaVersion = 1
+
 // cachedSession is the on-disk representation of a Cronometer login.
 // We key by username so flipping CRONOMETER_USERNAME invalidates the
 // cache automatically instead of replaying another user's session.
 type cachedSession struct {
+	Version   int              `json:"version"`
 	Username  string           `json:"username"`
 	Session   cronoapi.Session `json:"session"`
 	SavedAt   time.Time        `json:"saved_at"`
@@ -60,6 +66,9 @@ func loadCachedSession(user string) (*cachedSession, error) {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return nil, nil
 	}
+	if s.Version != cacheSchemaVersion {
+		return nil, nil
+	}
 	if s.Username != user {
 		return nil, nil
 	}
@@ -81,6 +90,7 @@ func saveCachedSession(user string, snap cronoapi.Session) error {
 		return err
 	}
 	data, err := json.Marshal(cachedSession{
+		Version:  cacheSchemaVersion,
 		Username: user,
 		Session:  snap,
 		SavedAt:  time.Now(),

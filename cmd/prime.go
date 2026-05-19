@@ -18,9 +18,13 @@ I/O
   stderr: errors. Exit 0 on success including empty results.
 
 AUTH
-  Env-var only — the CLI logs in on every run, no token cache.
+  Env-var credentials (always required):
     CRONOMETER_USERNAME   your Cronometer email
     CRONOMETER_PASSWORD   your Cronometer password
+
+  Session is cached at $XDG_CACHE_HOME/crono-export/session.json (mode 0600)
+  so consecutive calls reuse one login.  Set CRONOMETER_NO_CACHE=1 to
+  disable.  'crono-export auth logout' clears the cache.
 
   crono-export auth status   Exit 0 if both vars set, 1 with "missing X".
 
@@ -32,7 +36,7 @@ DATE FLAGS  (every subcommand)
 
 SUBCOMMANDS
   servings    per-food log; one row per food eaten, full nutrient breakdown
-  nutrition   daily totals across all foods (string-valued JSON — see GOTCHAS)
+  nutrition   daily totals across all foods (one row per day, all macros + micros)
   biometrics  weight, body fat, blood pressure, custom metrics
   exercises   logged cardio / strength / custom activities
   notes       user-entered notes per day
@@ -47,9 +51,8 @@ EXAMPLES
 
 GOTCHAS
   - 'today' is your LOCAL calendar day, not UTC.
-  - 'nutrition' and 'notes' JSON values are STRINGS (raw CSV) — cast with
-    'jq tonumber' when doing math. 'servings', 'biometrics', 'exercises'
-    are typed numbers.
+  - 'RecordedTime' is date-only (midnight in your local zone); Cronometer's
+    CSV exports don't carry meal-time, so all times sort as 00:00.
   - Markdown drops zero-valued nutrients; use --format json for every column.
   - 'servings' rows have a 'Day' field that is always null — use 'RecordedTime'.
 `

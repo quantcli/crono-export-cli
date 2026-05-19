@@ -48,3 +48,4 @@ cronometer-capture/
 tools/wirecapture/captures/
 tools/wirecapture/wirecapture
 *.unredacted.json
+.DS_Store

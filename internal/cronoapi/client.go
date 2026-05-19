@@ -77,6 +77,42 @@ func (c *Client) AuthToken() string { return c.authToken }
 // successful Login. Zero before Login or after Logout.
 func (c *Client) UserID() int { return c.userID }
 
+// Session is a serialisable snapshot of an authenticated client.
+// Callers can persist this between invocations to skip the login
+// handshake (see Client.Snapshot / Client.Restore).
+type Session struct {
+	UserID    int            `json:"user_id"`
+	AuthToken string         `json:"auth_token"`
+	Cookies   []*http.Cookie `json:"cookies"`
+}
+
+// Snapshot returns the current session state — userID, GWT auth token,
+// and the cookies the jar holds for the configured base URL.  Suitable
+// for serialisation to disk; restore on a fresh Client with Restore.
+func (c *Client) Snapshot() Session {
+	s := Session{UserID: c.userID, AuthToken: c.authToken}
+	if c.HTTPClient.Jar != nil {
+		if u, err := url.Parse(c.baseURL); err == nil {
+			s.Cookies = c.HTTPClient.Jar.Cookies(u)
+		}
+	}
+	return s
+}
+
+// Restore seeds the cookie jar and auth state from a previously
+// captured Session, skipping the login handshake.  The caller is
+// responsible for verifying the restored session still works (e.g. by
+// retrying on failure and falling back to a fresh Login).
+func (c *Client) Restore(s Session) {
+	c.userID = s.UserID
+	c.authToken = s.AuthToken
+	if c.HTTPClient.Jar != nil && len(s.Cookies) > 0 {
+		if u, err := url.Parse(c.baseURL); err == nil {
+			c.HTTPClient.Jar.SetCookies(u, s.Cookies)
+		}
+	}
+}
+
 // anticsrfRe extracts the hidden anti-CSRF token from the login HTML.
 // WIRE_SHAPES.md §(1).
 var anticsrfRe = regexp.MustCompile(`name="anticsrf"\s+value="([^"]+)"`)

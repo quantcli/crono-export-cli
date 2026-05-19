@@ -6,6 +6,7 @@ package cronoclient
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -22,6 +23,14 @@ const dateLayout = "2006-01-02"
 type DateRange struct {
 	Start time.Time
 	End   time.Time
+}
+
+// IsEmpty reports whether the range covers no days.  This happens when
+// the user supplies an inverted --since/--until pair; we treat it as
+// "no records" rather than an error so the contract's exit-0-on-empty
+// rule is honored.
+func (r DateRange) IsEmpty() bool {
+	return r.End.Before(r.Start)
 }
 
 // AddDateRangeFlags binds --since and --until on cmd.  Each subcommand calls
@@ -65,10 +74,11 @@ func resolveDateRange(sinceStr, untilStr string, ref time.Time) (DateRange, erro
 		until = today
 	}
 	if since.IsZero() {
-		since = until
+		// Default since when only --until is given: 7 days ending at --until.
+		since = until.AddDate(0, 0, -6)
 	}
 	if until.Before(since) {
-		return DateRange{}, fmt.Errorf("--until (%s) is before --since (%s)",
+		fmt.Fprintf(os.Stderr, "warning: --until (%s) is before --since (%s); returning empty result\n",
 			until.Format(dateLayout), since.Format(dateLayout))
 	}
 	return DateRange{Start: since, End: until}, nil

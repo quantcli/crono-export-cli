@@ -166,10 +166,10 @@ LLM agents: run `crono-export prime` for a one-screen orientation describing bot
 
 [Cronometer](https://cronometer.com) is a nutrition tracking app with one of the best micronutrient databases of any consumer tool — a major reason it's commonly recommended for bariatric patients, anyone tracking specific vitamin/mineral targets, or athletes managing recovery nutrition.
 
-This CLI is an unofficial tool for exporting your own data. It uses the same web export endpoints the Cronometer SPA uses, via [`jrmycanady/gocronometer`](https://github.com/jrmycanady/gocronometer). It is intended for personal single-user use only — see the upstream library's notes on appropriate use.
+This CLI is an unofficial tool for exporting your own data. It speaks directly to the same web export endpoints the Cronometer SPA uses, via an MIT-licensed in-tree HTTP client (`internal/cronoapi`). It is intended for personal single-user use only.
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
 
-The underlying [`gocronometer`](https://github.com/jrmycanady/gocronometer) library is GPLv2-licensed.
+The CLI is MIT-clean: it has no transitive GPL dependencies. See [LICENSING.md](LICENSING.md) for the history.

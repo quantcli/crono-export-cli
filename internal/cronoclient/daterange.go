@@ -1,6 +1,7 @@
-// Package cronoclient wraps github.com/jrmycanady/gocronometer with a small
-// session helper, typed export methods that return JSON-ready Go values, and
-// shared Cobra flag plumbing for date-range selection.
+// Package cronoclient wraps the internal MIT-licensed cronoapi client
+// with a small session helper, typed export methods that return
+// JSON-ready Go values, and shared Cobra flag plumbing for date-range
+// selection.
 package cronoclient
 
 import (

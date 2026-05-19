@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jrmycanady/gocronometer"
+	"github.com/quantcli/crono-export-cli/internal/cronoapi"
 )
 
-// Client wraps a logged-in gocronometer.Client and exposes export methods
+// Client wraps a logged-in cronoapi.Client and exposes export methods
 // that return JSON-ready Go values.
 type Client struct {
-	inner *gocronometer.Client
+	inner *cronoapi.Client
 }
 
 // NewLoggedIn creates a client and logs in using CRONOMETER_USERNAME and
@@ -25,7 +25,7 @@ func NewLoggedIn(ctx context.Context) (*Client, error) {
 	if user == "" || pass == "" {
 		return nil, fmt.Errorf("CRONOMETER_USERNAME and CRONOMETER_PASSWORD must be set")
 	}
-	inner := gocronometer.NewClient(nil)
+	inner := cronoapi.NewClient(nil)
 	if err := inner.Login(ctx, user, pass); err != nil {
 		return nil, fmt.Errorf("login failed: %w", err)
 	}

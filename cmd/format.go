@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jrmycanady/gocronometer"
+	"github.com/quantcli/crono-export-cli/internal/cronoapi"
 	"github.com/spf13/cobra"
 )
 
@@ -61,13 +61,13 @@ func emit(cmd *cobra.Command, kind recordKind, v any) error {
 func renderMarkdown(w io.Writer, kind recordKind, v any) error {
 	switch kind {
 	case kindServings:
-		recs, _ := v.(gocronometer.ServingRecords)
+		recs, _ := v.(cronoapi.ServingRecords)
 		return renderServings(w, recs)
 	case kindBiometrics:
-		recs, _ := v.(gocronometer.BiometricRecords)
+		recs, _ := v.(cronoapi.BiometricRecords)
 		return renderBiometrics(w, recs)
 	case kindExercises:
-		recs, _ := v.(gocronometer.ExerciseRecords)
+		recs, _ := v.(cronoapi.ExerciseRecords)
 		return renderExercises(w, recs)
 	case kindNutrition:
 		rows, _ := v.([]map[string]string)
@@ -115,12 +115,12 @@ func strippedSuffix(field string) (name, unit string) {
 
 // ---- servings ---------------------------------------------------------
 
-func renderServings(w io.Writer, recs gocronometer.ServingRecords) error {
+func renderServings(w io.Writer, recs cronoapi.ServingRecords) error {
 	if len(recs) == 0 {
 		return emptyMsg(w)
 	}
 	// Group by local calendar date.
-	byDate := map[string][]gocronometer.ServingRecord{}
+	byDate := map[string][]cronoapi.ServingRecord{}
 	for _, r := range recs {
 		d := r.RecordedTime.Format("2006-01-02")
 		byDate[d] = append(byDate[d], r)
@@ -144,7 +144,7 @@ func renderServings(w io.Writer, recs gocronometer.ServingRecords) error {
 	return nil
 }
 
-func renderServingRecord(w io.Writer, r gocronometer.ServingRecord) {
+func renderServingRecord(w io.Writer, r cronoapi.ServingRecord) {
 	header := fmt.Sprintf("### %s · %s", strDefault(r.Group, "—"), r.FoodName)
 	if r.QuantityValue != 0 || r.QuantityUnits != "" {
 		header += fmt.Sprintf(" (%s %s)", fmtFloat(r.QuantityValue), r.QuantityUnits)
@@ -192,11 +192,11 @@ func strDefault(s, fallback string) string {
 
 // ---- biometrics -------------------------------------------------------
 
-func renderBiometrics(w io.Writer, recs gocronometer.BiometricRecords) error {
+func renderBiometrics(w io.Writer, recs cronoapi.BiometricRecords) error {
 	if len(recs) == 0 {
 		return emptyMsg(w)
 	}
-	byDate := map[string][]gocronometer.BiometricRecord{}
+	byDate := map[string][]cronoapi.BiometricRecord{}
 	for _, r := range recs {
 		d := r.RecordedTime.Format("2006-01-02")
 		byDate[d] = append(byDate[d], r)
@@ -224,11 +224,11 @@ func renderBiometrics(w io.Writer, recs gocronometer.BiometricRecords) error {
 
 // ---- exercises --------------------------------------------------------
 
-func renderExercises(w io.Writer, recs gocronometer.ExerciseRecords) error {
+func renderExercises(w io.Writer, recs cronoapi.ExerciseRecords) error {
 	if len(recs) == 0 {
 		return emptyMsg(w)
 	}
-	byDate := map[string][]gocronometer.ExerciseRecord{}
+	byDate := map[string][]cronoapi.ExerciseRecord{}
 	for _, r := range recs {
 		d := r.RecordedTime.Format("2006-01-02")
 		byDate[d] = append(byDate[d], r)

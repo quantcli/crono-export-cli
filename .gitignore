@@ -1,0 +1,55 @@
+# If you prefer the allow list template instead of the deny list, see community template:
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+#
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Code coverage profiles and other test artifacts
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# env file
+.env
+
+# Editor/IDE
+# .idea/
+# .vscode/
+
+# GoReleaser output
+dist/
+
+# Local builds
+crono-export
+crono-export-linux-amd64
+*.zip
+*.tar.gz
+
+# Dev tooling kept out of the published repo.
+tools/
+
+# Wire-capture dumps — contain raw cookies, anti-CSRF tokens, password
+# POST bodies, and real account data. Never commit.
+cronometer-capture/
+*.unredacted.json
+
+.DS_Store
+
+# Agent / IDE local state
+.claude/
+AGENTS.md

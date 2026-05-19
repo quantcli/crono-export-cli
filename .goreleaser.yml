@@ -1,0 +1,49 @@
+version: 2
+
+builds:
+  - binary: crono-export
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - formats:
+      - zip
+    name_template: "crono-export_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+homebrew_casks:
+  - name: crono-export
+    skip_upload: auto
+    repository:
+      owner: quantcli
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Casks
+    homepage: https://github.com/quantcli/crono-export-cli
+    description: CLI to export Cronometer nutrition, biometrics, and food log data as JSON
+    license: MIT
+    url:
+      verified: github.com/quantcli/crono-export-cli
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/crono-export"]
+          end
+
+release:
+  replace_existing_artifacts: true

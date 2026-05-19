@@ -31,6 +31,16 @@ func AddFormatFlags(cmd *cobra.Command) {
 		"Output format: markdown (default, fitdown-style) or json")
 }
 
+// ValidateExportFlags is a PreRunE that fails fast on bad --format or date
+// flags before any network call is made. Without this, a typo in --format
+// would burn a Cronometer login attempt against the rate limit.
+func ValidateExportFlags(cmd *cobra.Command, _ []string) error {
+	if _, err := chosenFormat(cmd); err != nil {
+		return err
+	}
+	return nil
+}
+
 func chosenFormat(cmd *cobra.Command) (string, error) {
 	f, _ := cmd.Flags().GetString("format")
 	switch f {
@@ -70,10 +80,10 @@ func renderMarkdown(w io.Writer, kind recordKind, v any) error {
 		recs, _ := v.(cronoapi.ExerciseRecords)
 		return renderExercises(w, recs)
 	case kindNutrition:
-		rows, _ := v.([]map[string]string)
+		rows, _ := v.([]map[string]any)
 		return renderNutrition(w, rows)
 	case kindNotes:
-		rows, _ := v.([]map[string]string)
+		rows, _ := v.([]map[string]any)
 		return renderNotes(w, rows)
 	}
 	return fmt.Errorf("renderMarkdown: unknown kind %d", kind)
@@ -81,9 +91,29 @@ func renderMarkdown(w io.Writer, kind recordKind, v any) error {
 
 // ---- shared helpers ---------------------------------------------------
 
-func emptyMsg(w io.Writer) error {
-	_, err := fmt.Fprintln(w, "_(no records in window)_")
-	return err
+// noteEmpty writes a friendly "no records" note to stderr so humans see it,
+// while keeping stdout clean per the contract's "data only on stdout" rule.
+// w is ignored — kept for the renderer signatures.
+func noteEmpty(_ io.Writer) error {
+	fmt.Fprintln(os.Stderr, "(no records in window)")
+	return nil
+}
+
+// emptyValueFor returns the typed empty value for a record kind.  Used
+// when the caller knows there are no records (e.g. inverted date range)
+// and wants to emit them without making a network call.
+func emptyValueFor(kind recordKind) any {
+	switch kind {
+	case kindServings:
+		return cronoapi.ServingRecords{}
+	case kindBiometrics:
+		return cronoapi.BiometricRecords{}
+	case kindExercises:
+		return cronoapi.ExerciseRecords{}
+	case kindNutrition, kindNotes:
+		return []map[string]any{}
+	}
+	return nil
 }
 
 // fmtFloat trims trailing zeros so 1.95 → "1.95" and 100.000 → "100".
@@ -103,7 +133,7 @@ func strippedSuffix(field string) (name, unit string) {
 		{"Kcal", "kcal"},
 		{"Mg", "mg"},
 		{"Ug", "µg"},
-		{"UI", "IU"},
+		{"IU", "IU"},
 		{"G", "g"},
 	} {
 		if strings.HasSuffix(field, suf.go_) && len(field) > len(suf.go_) {
@@ -117,7 +147,7 @@ func strippedSuffix(field string) (name, unit string) {
 
 func renderServings(w io.Writer, recs cronoapi.ServingRecords) error {
 	if len(recs) == 0 {
-		return emptyMsg(w)
+		return noteEmpty(w)
 	}
 	// Group by local calendar date.
 	byDate := map[string][]cronoapi.ServingRecord{}
@@ -194,7 +224,7 @@ func strDefault(s, fallback string) string {
 
 func renderBiometrics(w io.Writer, recs cronoapi.BiometricRecords) error {
 	if len(recs) == 0 {
-		return emptyMsg(w)
+		return noteEmpty(w)
 	}
 	byDate := map[string][]cronoapi.BiometricRecord{}
 	for _, r := range recs {
@@ -226,7 +256,7 @@ func renderBiometrics(w io.Writer, recs cronoapi.BiometricRecords) error {
 
 func renderExercises(w io.Writer, recs cronoapi.ExerciseRecords) error {
 	if len(recs) == 0 {
-		return emptyMsg(w)
+		return noteEmpty(w)
 	}
 	byDate := map[string][]cronoapi.ExerciseRecord{}
 	for _, r := range recs {
@@ -263,19 +293,19 @@ func renderExercises(w io.Writer, recs cronoapi.ExerciseRecords) error {
 
 // ---- nutrition (daily totals, string-keyed CSV) ----------------------
 
-func renderNutrition(w io.Writer, rows []map[string]string) error {
+func renderNutrition(w io.Writer, rows []map[string]any) error {
 	if len(rows) == 0 {
-		return emptyMsg(w)
+		return noteEmpty(w)
 	}
 	// Sort by Date asc.
 	sort.SliceStable(rows, func(i, j int) bool {
-		return rows[i]["Date"] < rows[j]["Date"]
+		return cellString(rows[i]["Date"]) < cellString(rows[j]["Date"])
 	})
 	for di, row := range rows {
 		if di > 0 {
 			fmt.Fprintln(w)
 		}
-		date := row["Date"]
+		date := cellString(row["Date"])
 		if date == "" {
 			date = "(unknown date)"
 		}
@@ -294,7 +324,7 @@ func renderNutrition(w io.Writer, rows []map[string]string) error {
 			if isZeroish(v) {
 				continue
 			}
-			fmt.Fprintf(w, "- %s: %s\n", k, v)
+			fmt.Fprintf(w, "- %s: %s\n", k, cellString(v))
 		}
 	}
 	fmt.Fprintln(w)
@@ -302,34 +332,46 @@ func renderNutrition(w io.Writer, rows []map[string]string) error {
 	return nil
 }
 
-// isZeroish reports whether a CSV value should be treated as "no data" and
-// hidden from the markdown output.  Empty strings, "0", "0.0", "0.00", etc.
-// are zeroish; everything else (including "false", "true", arbitrary text)
-// is rendered.
-func isZeroish(s string) bool {
-	if s == "" {
-		return true
-	}
-	// Try numeric: if it parses to 0, it's zeroish.
-	var f float64
-	if _, err := fmt.Sscanf(s, "%f", &f); err == nil && f == 0 {
-		// But only if the entire string was numeric.
-		t := strings.TrimSpace(s)
-		for _, r := range t {
-			if !(r >= '0' && r <= '9') && r != '.' && r != '-' && r != '+' {
-				return false
-			}
+// cellString renders a coerced CSV cell back to a display string.  Floats
+// drop trailing zeros so "1.5" stays "1.5" and "100" stays "100".
+func cellString(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return x
+	case float64:
+		return fmtFloat(x)
+	case bool:
+		if x {
+			return "true"
 		}
+		return "false"
+	default:
+		return fmt.Sprintf("%v", x)
+	}
+}
+
+// isZeroish reports whether a coerced CSV value should be hidden from the
+// markdown output: nil, empty string, or numeric zero.  "false" / "true" /
+// arbitrary text is rendered.
+func isZeroish(v any) bool {
+	switch x := v.(type) {
+	case nil:
 		return true
+	case string:
+		return x == ""
+	case float64:
+		return x == 0
 	}
 	return false
 }
 
 // ---- notes ------------------------------------------------------------
 
-func renderNotes(w io.Writer, rows []map[string]string) error {
+func renderNotes(w io.Writer, rows []map[string]any) error {
 	if len(rows) == 0 {
-		return emptyMsg(w)
+		return noteEmpty(w)
 	}
 	dateKey := pickKey(rows[0], "Day", "Date")
 	noteKey := pickKey(rows[0], "Note", "Notes", "Comment")
@@ -339,31 +381,31 @@ func renderNotes(w io.Writer, rows []map[string]string) error {
 		if di > 0 {
 			fmt.Fprintln(w)
 		}
-		date := row[dateKey]
+		date := cellString(row[dateKey])
 		if date == "" {
 			date = "(unknown date)"
 		}
 		header := "## " + date
-		if t := row[timeKey]; t != "" {
+		if t := cellString(row[timeKey]); t != "" {
 			header += " " + t
 		}
 		fmt.Fprintln(w, header)
-		if note := strings.TrimSpace(row[noteKey]); note != "" {
+		if note := strings.TrimSpace(cellString(row[noteKey])); note != "" {
 			fmt.Fprintln(w, note)
 		} else {
 			// Fall back to dumping all non-empty fields if we can't find a Note column.
 			for k, v := range row {
-				if k == dateKey || k == timeKey || v == "" {
+				if k == dateKey || k == timeKey || isZeroish(v) {
 					continue
 				}
-				fmt.Fprintf(w, "- %s: %s\n", k, v)
+				fmt.Fprintf(w, "- %s: %s\n", k, cellString(v))
 			}
 		}
 	}
 	return nil
 }
 
-func pickKey(row map[string]string, candidates ...string) string {
+func pickKey(row map[string]any, candidates ...string) string {
 	for _, c := range candidates {
 		if _, ok := row[c]; ok {
 			return c
@@ -371,4 +413,3 @@ func pickKey(row map[string]string, candidates ...string) string {
 	}
 	return ""
 }
-

@@ -78,7 +78,17 @@ export CRONOMETER_USERNAME="you@example.com"
 export CRONOMETER_PASSWORD="your-cronometer-password"
 ```
 
-The CLI logs in on every invocation; there's no token cache. Cronometer doesn't (yet) offer SSO or API tokens for individuals, so a real password is the only auth option.
+Cronometer doesn't (yet) offer SSO or API tokens for individuals, so a real password is the only auth option.
+
+After the first successful login, the session (auth token + cookies) is cached at `$XDG_CACHE_HOME/crono-export/session.json` (file mode `0600`, directory mode `0700`; on macOS this resolves to `~/Library/Caches/crono-export/session.json`). Subsequent invocations reuse the cached session and skip the login handshake — useful for LLM-agent workflows that fire several commands in quick succession (a fresh login on every call trips Cronometer's "Too Many Attempts" throttle after ~6 requests). When the cached session goes stale, the CLI transparently re-logs in and retries once.
+
+Escape hatches:
+
+- `CRONOMETER_NO_CACHE=1` forces a fresh login on every invocation (and skips writing the cache).
+- `crono-export auth logout` deletes the cached session.
+- `crono-export auth status` reports whether credentials are set and whether a session is cached.
+
+Treat `session.json` like a password: don't sync it to a shared backup, and don't commit it.
 
 ## Usage
 

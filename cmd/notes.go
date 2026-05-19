@@ -7,12 +7,17 @@ import (
 )
 
 var notesCmd = &cobra.Command{
-	Use:   "notes",
-	Short: "Export user-entered notes",
+	Use:     "notes",
+	Short:   "Export user-entered notes",
+	Args:    cobra.NoArgs,
+	PreRunE: ValidateExportFlags,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		rng, err := cronoclient.ParseDateRangeFromFlags(cmd)
 		if err != nil {
 			return err
+		}
+		if rng.IsEmpty() {
+			return emit(cmd, kindNotes, emptyValueFor(kindNotes))
 		}
 		ctx := cmd.Context()
 		c, err := cronoclient.NewLoggedIn(ctx)

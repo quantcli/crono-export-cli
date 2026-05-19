@@ -7,12 +7,17 @@ import (
 )
 
 var servingsCmd = &cobra.Command{
-	Use:   "servings",
-	Short: "Export logged food servings (one row per food eaten, full nutrient breakdown)",
+	Use:     "servings",
+	Short:   "Export logged food servings (one row per food eaten, full nutrient breakdown)",
+	Args:    cobra.NoArgs,
+	PreRunE: ValidateExportFlags,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		rng, err := cronoclient.ParseDateRangeFromFlags(cmd)
 		if err != nil {
 			return err
+		}
+		if rng.IsEmpty() {
+			return emit(cmd, kindServings, emptyValueFor(kindServings))
 		}
 		ctx := cmd.Context()
 		c, err := cronoclient.NewLoggedIn(ctx)

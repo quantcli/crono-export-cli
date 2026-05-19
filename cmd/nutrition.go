@@ -7,12 +7,17 @@ import (
 )
 
 var nutritionCmd = &cobra.Command{
-	Use:   "nutrition",
-	Short: "Export daily total nutrition (one row per day, all macros + micros)",
+	Use:     "nutrition",
+	Short:   "Export daily total nutrition (one row per day, all macros + micros)",
+	Args:    cobra.NoArgs,
+	PreRunE: ValidateExportFlags,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		rng, err := cronoclient.ParseDateRangeFromFlags(cmd)
 		if err != nil {
 			return err
+		}
+		if rng.IsEmpty() {
+			return emit(cmd, kindNutrition, emptyValueFor(kindNutrition))
 		}
 		ctx := cmd.Context()
 		c, err := cronoclient.NewLoggedIn(ctx)

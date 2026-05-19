@@ -1,0 +1,58 @@
+{
+  "seq": 2,
+  "label": "login_post",
+  "reqMethod": "POST",
+  "reqUrl": "https://cronometer.com/login",
+  "reqHeader": {
+    "Content-Type": [
+      "application/x-www-form-urlencoded"
+    ],
+    "Cookie": [
+      "<REDACTED-COOKIE-VALUES>"
+    ]
+  },
+  "reqBodySummary": {
+    "kind": "text",
+    "len": 104,
+    "note": "Body elided. See WIRE_SHAPES.md for the synthesized request shape for this endpoint."
+  },
+  "respStatus": 200,
+  "respHeader": {
+    "Content-Type": [
+      "application/json;charset=UTF-8"
+    ],
+    "Date": [
+      "Tue, 12 May 2026 02:18:14 GMT"
+    ],
+    "Referrer-Policy": [
+      "strict-origin-when-cross-origin"
+    ],
+    "Set-Cookie": [
+      "<REDACTED-COOKIE-NAME>=<REDACTED-VALUE>; Expires=Tue, 19 May 2026 02:18:14 GMT; Path=/",
+      "<REDACTED-COOKIE-NAME>=<REDACTED-VALUE>; Expires=Tue, 19 May 2026 02:18:14 GMT; Path=/; SameSite=None; Secure",
+      "<REDACTED-COOKIE-NAME>=<REDACTED-VALUE>; Max-Age=1209600; Expires=Tue, 26 May 2026 02:18:14 GMT; Path=/; Secure; HttpOnly; SameSite=Lax",
+      "<REDACTED-COOKIE-NAME>=<REDACTED-VALUE>; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:10 GMT; Path=/; Secure; HttpOnly"
+    ],
+    "Strict-Transport-Security": [
+      "max-age=63072000; includeSubDomains; preload"
+    ],
+    "Vary": [
+      "accept-encoding"
+    ],
+    "X-Content-Type-Options": [
+      "nosniff"
+    ],
+    "X-Frame-Options": [
+      "sameorigin"
+    ],
+    "X-Xss-Protection": [
+      "1; mode=block"
+    ]
+  },
+  "respBodySummary": {
+    "kind": "text",
+    "len": 39,
+    "note": "Body elided (contains real account data + tokens). See WIRE_SHAPES.md for the synthesized response shape for this endpoint."
+  },
+  "durationMsApprox": 138
+}

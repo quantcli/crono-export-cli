@@ -1,0 +1,47 @@
+{
+  "seq": 1,
+  "label": "login_get",
+  "reqMethod": "GET",
+  "reqUrl": "https://cronometer.com/login/",
+  "reqHeader": {},
+  "reqBodySummary": null,
+  "respStatus": 200,
+  "respHeader": {
+    "Content-Type": [
+      "text/html;charset=UTF-8"
+    ],
+    "Date": [
+      "Tue, 12 May 2026 02:18:14 GMT"
+    ],
+    "Referrer-Policy": [
+      "strict-origin-when-cross-origin"
+    ],
+    "Set-Cookie": [
+      "<REDACTED-COOKIE-NAME>=<REDACTED-VALUE>; Expires=Tue, 19 May 2026 02:18:14 GMT; Path=/",
+      "<REDACTED-COOKIE-NAME>=<REDACTED-VALUE>; Expires=Tue, 19 May 2026 02:18:14 GMT; Path=/; SameSite=None; Secure",
+      "<REDACTED-COOKIE-NAME>=<REDACTED-VALUE>; Path=/; Secure; HttpOnly",
+      "<REDACTED-COOKIE-NAME>=<REDACTED-VALUE>; Max-Age=172800; Expires=Thu, 14 May 2026 02:18:14 GMT; Path=/; Secure; HttpOnly"
+    ],
+    "Strict-Transport-Security": [
+      "max-age=63072000; includeSubDomains; preload"
+    ],
+    "Vary": [
+      "accept-encoding"
+    ],
+    "X-Content-Type-Options": [
+      "nosniff"
+    ],
+    "X-Frame-Options": [
+      "sameorigin"
+    ],
+    "X-Xss-Protection": [
+      "1; mode=block"
+    ]
+  },
+  "respBodySummary": {
+    "kind": "text",
+    "len": 683935,
+    "note": "Body elided (contains real account data + tokens). See WIRE_SHAPES.md for the synthesized response shape for this endpoint."
+  },
+  "durationMsApprox": 105
+}

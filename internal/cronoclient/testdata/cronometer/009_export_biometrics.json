@@ -1,0 +1,61 @@
+{
+  "seq": 9,
+  "label": "export_biometrics",
+  "reqMethod": "GET",
+  "reqUrl": "https://cronometer.com/export?end=2026-05-11&generate=biometrics&nonce=%3CREDACTED%3E&start=2026-05-04",
+  "reqHeader": {
+    "Cookie": [
+      "<REDACTED-COOKIE-VALUES>"
+    ],
+    "Sec-Fetch-Dest": [
+      "document"
+    ],
+    "Sec-Fetch-Mode": [
+      "navigate"
+    ],
+    "Sec-Fetch-Site": [
+      "same-origin"
+    ]
+  },
+  "reqBodySummary": null,
+  "respStatus": 200,
+  "respHeader": {
+    "Content-Disposition": [
+      "attachment; filename=\"biometrics.csv\""
+    ],
+    "Content-Length": [
+      "29"
+    ],
+    "Content-Type": [
+      "text/csv"
+    ],
+    "Date": [
+      "Tue, 12 May 2026 02:18:15 GMT"
+    ],
+    "Referrer-Policy": [
+      "strict-origin-when-cross-origin"
+    ],
+    "Set-Cookie": [
+      "<REDACTED-COOKIE-NAME>=<REDACTED-VALUE>; Expires=Tue, 19 May 2026 02:18:15 GMT; Path=/",
+      "<REDACTED-COOKIE-NAME>=<REDACTED-VALUE>; Expires=Tue, 19 May 2026 02:18:15 GMT; Path=/; SameSite=None; Secure"
+    ],
+    "Strict-Transport-Security": [
+      "max-age=63072000; includeSubDomains; preload"
+    ],
+    "X-Content-Type-Options": [
+      "nosniff"
+    ],
+    "X-Frame-Options": [
+      "sameorigin"
+    ],
+    "X-Xss-Protection": [
+      "1; mode=block"
+    ]
+  },
+  "respBodySummary": {
+    "kind": "text",
+    "len": 29,
+    "note": "Body elided (contains real account data + tokens). See WIRE_SHAPES.md for the synthesized response shape for this endpoint."
+  },
+  "durationMsApprox": 42
+}

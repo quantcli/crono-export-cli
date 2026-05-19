@@ -1,0 +1,65 @@
+{
+  "seq": 10,
+  "label": "gwt_generate_auth_token_dailysummary",
+  "reqMethod": "POST",
+  "reqUrl": "https://cronometer.com/cronometer/app",
+  "reqHeader": {
+    "Content-Type": [
+      "text/x-gwt-rpc; charset=UTF-8"
+    ],
+    "Cookie": [
+      "<REDACTED-COOKIE-VALUES>"
+    ],
+    "X-Gwt-Module-Base": [
+      "https://cronometer.com/cronometer/"
+    ],
+    "X-Gwt-Permutation": [
+      "7B121DC5483BF272B1BC1916DA9FA963"
+    ]
+  },
+  "reqBodySummary": {
+    "kind": "text",
+    "len": 294,
+    "note": "Body elided. See WIRE_SHAPES.md for the synthesized request shape for this endpoint."
+  },
+  "respStatus": 200,
+  "respHeader": {
+    "Content-Disposition": [
+      "attachment"
+    ],
+    "Content-Length": [
+      "48"
+    ],
+    "Content-Type": [
+      "application/json;charset=utf-8"
+    ],
+    "Date": [
+      "Tue, 12 May 2026 02:18:15 GMT"
+    ],
+    "Referrer-Policy": [
+      "strict-origin-when-cross-origin"
+    ],
+    "Set-Cookie": [
+      "<REDACTED-COOKIE-NAME>=<REDACTED-VALUE>; Expires=Tue, 19 May 2026 02:18:15 GMT; Path=/",
+      "<REDACTED-COOKIE-NAME>=<REDACTED-VALUE>; Expires=Tue, 19 May 2026 02:18:15 GMT; Path=/; SameSite=None; Secure"
+    ],
+    "Strict-Transport-Security": [
+      "max-age=63072000; includeSubDomains; preload"
+    ],
+    "X-Content-Type-Options": [
+      "nosniff"
+    ],
+    "X-Frame-Options": [
+      "sameorigin"
+    ],
+    "X-Xss-Protection": [
+      "1; mode=block"
+    ]
+  },
+  "respBodySummary": {
+    "kind": "text",
+    "len": 48,
+    "note": "Body elided (contains real account data + tokens). See WIRE_SHAPES.md for the synthesized response shape for this endpoint."
+  },
+  "durationMsApprox": 27
+}

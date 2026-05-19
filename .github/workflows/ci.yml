@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: go vet + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./...
+
+  compat:
+    name: compat (CONTRACT machine-attestation)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: resolve compat dependency
+        # The compat module lives at github.com/quantcli/common/compat
+        # under a subpath. `go mod tidy` materializes go.sum for it on
+        # first run; subsequent runs are cache-served.
+        run: go mod tidy
+      - name: build crono-export
+        run: go build -o /tmp/crono-export .
+      - name: run compat suite
+        env:
+          # Path the compat-tagged test reads from os.Getenv.
+          CRONO_EXPORT_BIN: /tmp/crono-export
+        run: go test -tags=compat -run 'TestContract(Dates|Formats)' ./...

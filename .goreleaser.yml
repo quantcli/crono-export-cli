@@ -16,6 +16,7 @@ builds:
         goarch: arm64
     ldflags:
       - -s -w
+      - -X github.com/quantcli/crono-export-cli/cmd.version=v{{ .Version }}
 
 archives:
   - formats:

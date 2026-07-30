@@ -8,9 +8,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// version is overwritten at release time via
+// -ldflags "-X github.com/quantcli/crono-export-cli/cmd.version=v1.1.0".
+// Setting rootCmd.Version below makes cobra register --version for free.
+var version = "dev"
+
 var rootCmd = &cobra.Command{
-	Use:   "crono-export",
-	Short: "Export Cronometer nutrition, biometrics, and food log data",
+	Use:     "crono-export",
+	Short:   "Export Cronometer nutrition, biometrics, and food log data",
+	Version: version,
 	Long: `crono-export reads your personal Cronometer data via the same export
 endpoints the web app uses and prints it on stdout.  Default output is
 narrow, fitdown-style markdown; pass --format json for the full

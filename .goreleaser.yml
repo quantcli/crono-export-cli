@@ -37,8 +37,6 @@ homebrew_casks:
     homepage: https://github.com/quantcli/crono-export-cli
     description: CLI to export Cronometer nutrition, biometrics, and food log data as JSON
     license: MIT
-    url:
-      verified: github.com/quantcli/crono-export-cli
     hooks:
       post:
         install: |

@@ -1,6 +1,6 @@
 module github.com/quantcli/crono-export-cli
 
-go 1.26.8
+go 1.26.10
 
 require (
 	github.com/quantcli/common/compat v0.0.0-20260511224412-1cf4a39648c5

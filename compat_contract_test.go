@@ -71,3 +71,11 @@ func TestContractFormats(t *testing.T) {
 		SkipDataPath:     true,
 	})
 }
+
+func TestContractResolvedWindow(t *testing.T) {
+	bin := os.Getenv("CRONO_EXPORT_BIN")
+	if bin == "" {
+		t.Skip("CRONO_EXPORT_BIN not set")
+	}
+	dates.RunResolvedWindow(t, compat.Runner{Binary: bin, Subcommands: cronoSubcommands})
+}

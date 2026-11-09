@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 )
 
@@ -37,7 +38,8 @@ type Fake struct {
 	// Test-observable state.
 	LoginPosts     int
 	GWTPosts       int
-	ExportRequests []string // captured /export ?generate= values
+	ExportRequests []string        // captured /export ?generate= values
+	ExportQueries  chan url.Values // captured query parameters for request assertions
 
 	csrfToken string
 	authToken string
@@ -48,9 +50,10 @@ type Fake struct {
 // Fake. The caller is responsible for closing it (typically via t.Cleanup).
 func New() *Fake {
 	f := &Fake{
-		csrfToken: "abcdef0123456789abcdef0123456789",
-		authToken: "11112222333344445555666677778888",
-		userID:    7654321,
+		ExportQueries: make(chan url.Values, 128),
+		csrfToken:     "abcdef0123456789abcdef0123456789",
+		authToken:     "11112222333344445555666677778888",
+		userID:        7654321,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/login/", f.handleLoginGet)
@@ -127,6 +130,10 @@ func (f *Fake) handleExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
+	}
+	select {
+	case f.ExportQueries <- r.URL.Query():
+	default:
 	}
 	gen := r.URL.Query().Get("generate")
 	f.ExportRequests = append(f.ExportRequests, gen)

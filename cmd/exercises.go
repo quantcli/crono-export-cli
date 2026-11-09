@@ -16,6 +16,9 @@ var exercisesCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if printed, err := exporter.PrintResolvedWindow(cmd, rng); printed || err != nil {
+			return err
+		}
 		if rng.IsEmpty() {
 			return emit(cmd, kindExercises, emptyValueFor(kindExercises))
 		}

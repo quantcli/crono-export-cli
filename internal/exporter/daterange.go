@@ -37,6 +37,7 @@ func (r DateRange) IsEmpty() bool {
 // this so they all share the same flag vocabulary, per the quantcli shared
 // contract: https://github.com/quantcli/common/blob/main/CONTRACT.md#3-date-flags.
 func AddDateRangeFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("print-resolved-window", false, "Print the resolved date window without contacting Cronometer")
 	cmd.Flags().String("since", "",
 		"Filter on or after date (today, yesterday, YYYY-MM-DD, or Nd/Nw/Nm/Ny; default 7d)")
 	cmd.Flags().String("until", "",
@@ -120,4 +121,15 @@ func parseDateValue(s string, today time.Time) (time.Time, error) {
 	default:
 		return time.Time{}, fmt.Errorf("invalid date unit %q: use d, w, m, or y", string(s[len(s)-1]))
 	}
+}
+
+// PrintResolvedWindow prints the half-open representation of the same
+// inclusive calendar range passed to Cronometer, without contacting it.
+func PrintResolvedWindow(cmd *cobra.Command, r DateRange) (bool, error) {
+	enabled, err := cmd.Flags().GetBool("print-resolved-window")
+	if err != nil || !enabled {
+		return false, err
+	}
+	_, err = fmt.Fprintf(cmd.OutOrStdout(), "since=%s until_exclusive=%s\n", r.Start.Format(time.RFC3339), r.End.AddDate(0, 0, 1).Format(time.RFC3339))
+	return true, err
 }

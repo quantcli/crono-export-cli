@@ -204,3 +204,52 @@ func TestCLI_Prime_NoNetwork(t *testing.T) {
 		t.Errorf("prime output should mention the binary name; got %q", stdout)
 	}
 }
+
+func TestCLI_ResolvedWindowOffline(t *testing.T) {
+	cases := []struct{ zone, day, want string }{
+		{"Pacific/Honolulu", "2026-04-15", "since=2026-04-15T00:00:00-10:00 until_exclusive=2026-04-16T00:00:00-10:00\n"},
+		{"Pacific/Kiritimati", "2026-04-15", "since=2026-04-15T00:00:00+14:00 until_exclusive=2026-04-16T00:00:00+14:00\n"},
+		{"America/New_York", "2026-03-08", "since=2026-03-08T00:00:00-05:00 until_exclusive=2026-03-09T00:00:00-04:00\n"},
+		{"America/New_York", "2026-11-01", "since=2026-11-01T00:00:00-04:00 until_exclusive=2026-11-02T00:00:00-05:00\n"},
+	}
+	for _, sub := range []string{"biometrics", "exercises", "nutrition", "servings", "notes"} {
+		for _, tc := range cases {
+			t.Run(sub+"/"+tc.zone+"/"+tc.day, func(t *testing.T) {
+				out, stderr, code := runCLI(t, []string{"TZ=" + tc.zone, "CRONOMETER_USERNAME=", "CRONOMETER_PASSWORD=", "HTTPS_PROXY=http://127.0.0.1:1"}, sub, "--since", tc.day, "--until", tc.day, "--print-resolved-window")
+				if code != 0 || out != tc.want || stderr != "" {
+					t.Errorf("exit=%d stdout=%q stderr=%q; want %q", code, out, stderr, tc.want)
+				}
+			})
+		}
+	}
+}
+
+// The diagnostic and the actual request must agree on the selected local days.
+func TestCLI_ResolvedWindowMatchesExportRequest(t *testing.T) {
+	f := cronotest.New()
+	defer f.Close()
+	f.DailySummaryCSV = "Date,Calories\n2026-03-08,1800\n"
+	env := append(fakeEnv(f), "TZ=America/New_York")
+	args := []string{"nutrition", "--since", "2026-03-08", "--until", "2026-03-08"}
+	output, stderr, code := runCLI(t, env, append(args, "--print-resolved-window")...)
+	if code != 0 || stderr != "" || output != "since=2026-03-08T00:00:00-05:00 until_exclusive=2026-03-09T00:00:00-04:00\n" {
+		t.Fatalf("diagnostic exit=%d stdout=%q stderr=%q", code, output, stderr)
+	}
+	select {
+	case q := <-f.ExportQueries:
+		t.Fatalf("diagnostic unexpectedly requested export: %v", q)
+	default:
+	}
+	_, stderr, code = runCLI(t, env, args...)
+	if code != 0 {
+		t.Fatalf("export exit=%d stderr=%q", code, stderr)
+	}
+	select {
+	case q := <-f.ExportQueries:
+		if q.Get("start") != "2026-03-08" || q.Get("end") != "2026-03-08" {
+			t.Fatalf("unexpected export dates: %v", q)
+		}
+	default:
+		t.Fatal("export request was not received")
+	}
+}

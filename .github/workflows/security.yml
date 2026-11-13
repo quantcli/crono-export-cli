@@ -1,4 +1,4 @@
-# security.yml v1 — source of truth: quantcli/common; sync changes to every *-export-cli.
+# security.yml v2 — source of truth: quantcli/common; sync changes to every *-export-cli.
 # Bump the version when this workflow changes materially; a future drift-check job will key off it.
 # See quantcli/common CONTRIBUTING.md "Supply-chain and security" for the propagation policy and
 # the >5-repos switchover trigger to a reusable workflow_call.
@@ -8,12 +8,40 @@ name: security
 # Supply-chain and license-policy gate for quantcli repos.
 # Source of truth lives in quantcli/common; export-clis carry a copy of this file.
 # When updating, propagate the change to every *-export-cli repo (see CONTRIBUTING.md).
+#
+# Go-version policy (one rule, two consequences — the jobs below look inconsistent
+# on purpose):
+#
+#   A toolchain that ANALYSES our code must match the version we ship, because the
+#   result depends on it — govulncheck reports stdlib vulnerabilities relative to
+#   the toolchain it analyses with, so scanning under a newer Go would silently
+#   clear stdlib vulns that are still present in what we release. Those jobs use
+#   `go-version-file: go.mod`.
+#
+#   A toolchain that merely BUILDS a scanner must not be constrained by our pin.
+#   Scanner modules move their own `go` directive ahead of ours (as of 2026-11-13:
+#   osv-scanner needs go >= 1.27.3, x/vuln needs >= 1.26.0, the export-clis pin
+#   1.26.10). setup-go exports GOTOOLCHAIN=local, which disables Go's automatic
+#   toolchain upgrade, so a `go install` of a tool that outruns our pin hard-fails.
+#
+# So: the osv-scanner job reads go.mod/go.sum as lockfiles and never analyses our
+# code, so it is free to use `go-version: stable`. The two jobs that do analyse our
+# code stay pinned to go.mod and scope `GOTOOLCHAIN: auto` to the install step only,
+# which lets the tool build self-upgrade without changing the version used to scan.
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  # Daily re-scan. A new advisory landing in the Go vuln DB does not change our
+  # code, so push/pull_request alone never re-checks a repo that has no commit
+  # traffic — detection would depend on commit activity, which is unrelated to
+  # whether we are vulnerable. Offset minute avoids on-the-hour GitHub congestion.
+  # Note: GitHub only runs `schedule` from the default branch, and auto-disables
+  # scheduled workflows in a public repo after 60 days with no repository activity.
+  schedule:
+    - cron: '17 6 * * *'
   workflow_dispatch:
 
 # Default-deny at workflow level; each job re-grants only what it needs.
@@ -48,6 +76,10 @@ jobs:
 
       - name: Install govulncheck
         if: steps.detect.outputs.has_go == 'true'
+        # Tool build only — see "Go-version policy" at the top of this file.
+        # Scoped to this step so `Run govulncheck` below still analyses with our pin.
+        env:
+          GOTOOLCHAIN: auto
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: Run govulncheck
@@ -81,6 +113,11 @@ jobs:
         if: steps.detect.outputs.has_manifests == 'true'
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
+          # Deliberately `stable`, not `go-version-file: go.mod` like the other two
+          # jobs — see "Go-version policy" at the top of this file. osv-scanner parses
+          # go.mod/go.sum as lockfiles and never builds or analyses our code, so our
+          # pin cannot affect the scan result; this toolchain exists only to build the
+          # scanner, whose own `go` directive runs ahead of ours.
           go-version: stable
           cache: false
 
@@ -125,6 +162,9 @@ jobs:
 
       - name: Install go-licenses
         if: steps.detect.outputs.has_go == 'true'
+        # Tool build only — see "Go-version policy" at the top of this file.
+        env:
+          GOTOOLCHAIN: auto
         run: go install github.com/google/go-licenses@latest
 
       - name: Check licenses against allowlist

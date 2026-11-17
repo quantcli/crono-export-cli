@@ -14,8 +14,10 @@ WHAT IT IS
   biometrics (weight/fat/BP/...), exercises, and notes.
 
 I/O
-  stdout: data in --format markdown (default) or json.
+  stdout: data in --format markdown (default), json, or csv.
   stderr: errors. Exit 0 on success including empty results.
+  csv: header row (always, even with no rows), then one row per JSON
+    array element. Columns are the JSON keys; null is an empty cell.
 
 AUTH
   Env-var credentials (always required):
@@ -53,7 +55,8 @@ GOTCHAS
   - 'today' is your LOCAL calendar day, not UTC.
   - 'RecordedTime' is date-only (midnight in your local zone); Cronometer's
     CSV exports don't carry meal-time, so all times sort as 00:00.
-  - Markdown drops zero-valued nutrients; use --format json for every column.
+  - Markdown drops zero-valued nutrients; use --format json or csv for every
+    column.
   - 'servings' rows have a 'Day' field that is always null — use 'RecordedTime'.
 `
 

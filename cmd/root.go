@@ -19,15 +19,18 @@ var rootCmd = &cobra.Command{
 	Version: version,
 	Long: `crono-export reads your personal Cronometer data via the same export
 endpoints the web app uses and prints it on stdout.  Default output is
-narrow, fitdown-style markdown; pass --format json for the full
-structured row.
+narrow, fitdown-style markdown; pass --format json or --format csv for
+the full structured row.
 
 Credentials must be supplied via environment variables:
   CRONOMETER_USERNAME  your Cronometer email
   CRONOMETER_PASSWORD  your Cronometer password
 
+Run 'crono-export auth status' to check them: it prints one line and
+exits 0 if both are set, non-zero naming whichever is missing.
+
 Designed for use by personal LLM agents and scripts — markdown reads
-well in chat, JSON pipes well to jq.
+well in chat, JSON pipes well to jq, CSV opens in a spreadsheet.
 
 LLM agents: run 'crono-export prime' for a one-screen orientation
 (I/O contract, subcommands, date flags, jq recipes).`,

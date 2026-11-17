@@ -18,6 +18,8 @@ import (
 	"github.com/quantcli/common/compat"
 	"github.com/quantcli/common/compat/dates"
 	"github.com/quantcli/common/compat/formats"
+
+	"github.com/quantcli/crono-export-cli/internal/cronotest"
 )
 
 // cronoSubcommands is the §3/§4 surface for crono — each subcommand
@@ -52,23 +54,42 @@ func TestContractFormats(t *testing.T) {
 	if bin == "" {
 		t.Skip("CRONO_EXPORT_BIN not set; skipping compat suite")
 	}
-	// crono implements --format markdown (default) and --format json
-	// today; CSV is not yet wired (see cmd/format.go chosenFormat).
-	// SupportedFormats: ["markdown","json"] skips CSVHasHeader with a
-	// named reason rather than failing it.
+	// crono implements all three §4 codecs, so every subtest of the
+	// bundle runs: nothing is skipped via SupportedFormats, and nothing
+	// via SkipDataPath.
 	//
-	// SkipDataPath: true opts out of JSONIsArray / CSVHasHeader /
-	// DefaultIsMarkdown — crono's data path requires
-	// CRONOMETER_USERNAME/PASSWORD which the compat CI job does not
-	// provide, so the data-path subtests would fail at "not logged in"
-	// before the codec assertions could run. The parse-level subtests
-	// (HelpDocumentsFormatFlag, UnknownFormatFails,
-	// FlagValidationIsHermetic) still attest the §4 surface.
+	// The data-path subtests (JSONIsArray, CSVHasHeader,
+	// DefaultIsMarkdown) need a successful export, and CI has no
+	// Cronometer credentials. They run against cronotest.Fake instead —
+	// the same in-process stand-in the CLI's own E2E tests use — reached
+	// through the CLI's CRONOMETER_BASE_URL override with placeholder
+	// credentials. The fake answers each export the way Cronometer
+	// answers a window with no records: a header row and nothing else.
+	// So the bundle exercises the §4 empty-result rules: `[]` for json,
+	// a header line for csv, and byte-identical (empty) stdout for the
+	// default and --format markdown.
+	fake := cronotest.New()
+	t.Cleanup(fake.Close)
+	fake.ServingsCSV = "Day,Group,Food Name,Amount,Energy (kcal)\n"
+	fake.ExercisesCSV = "Day,Exercise,Minutes,Calories Burned,Group\n"
+	fake.BiometricsCSV = "Day,Metric,Unit,Amount\n"
+	fake.DailySummaryCSV = "Date,Energy (kcal)\n"
+	fake.NotesCSV = "Day,Note\n"
+
 	formats.RunContract(t, compat.Runner{
 		Binary:           bin,
 		Subcommands:      cronoSubcommands,
-		SupportedFormats: []string{"markdown", "json"},
-		SkipDataPath:     true,
+		SupportedFormats: []string{"markdown", "json", "csv"},
+		Env: []string{
+			"CRONOMETER_USERNAME=compat@example.com",
+			"CRONOMETER_PASSWORD=compat-placeholder",
+			"CRONOMETER_BASE_URL=" + fake.URL(),
+			// No session cache: nothing is read from or written to
+			// the machine running the suite.
+			"CRONOMETER_NO_CACHE=1",
+			"HOME=" + t.TempDir(),
+			"TZ=UTC",
+		},
 	})
 }
 

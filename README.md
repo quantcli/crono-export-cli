@@ -10,7 +10,7 @@ Export your personal nutrition, biometric, and food-log data from [Cronometer](h
 ## Features
 
 - **Five export endpoints** — servings (per-food log with full nutrient breakdown), nutrition (daily totals), biometrics (weight, body fat, custom metrics), exercises, and notes
-- **Markdown by default, JSON on demand** — narrow fitdown-style markdown reads well in chat and terminals; pass `--format json` for the full structured row to pipe through `jq`
+- **Markdown by default, JSON or CSV on demand** — narrow fitdown-style markdown reads well in chat and terminals; pass `--format json` for the full structured row to pipe through `jq`, or `--format csv` for a spreadsheet
 - **Date selection** — `--since` / `--until` accepting `today`, `yesterday`, `YYYY-MM-DD`, or `Nd`/`Nw`/`Nm`/`Ny` on every subcommand
 - **Single static binary** — no Python or Node runtime; drop it in `~/bin/` and go
 - **Credentials via env** — `CRONOMETER_USERNAME` / `CRONOMETER_PASSWORD`, no config file needed
@@ -168,9 +168,12 @@ For programmatic use, pass `--format json` to get the full structured row as a J
 ```sh
 crono-export servings --since today                 # markdown, default
 crono-export servings --since today --format json | jq '[.[] | {food: .FoodName, protein: .ProteinG}]'
+crono-export nutrition --since 30d --format csv > nutrition.csv
 ```
 
-LLM agents: run `crono-export prime` for a one-screen orientation describing both formats, all subcommands, the date flags, and `jq` recipes.
+`--format csv` is the same rows as `--format json`, flattened for a spreadsheet: a header row, then one row per record. Columns are named after the JSON keys (for `nutrition` and `notes`, in Cronometer's own column order), numbers are plain decimals, timestamps are RFC 3339 in your local zone, and a JSON `null` is an empty cell. Nothing is suppressed. The header row is printed even when the window holds no records.
+
+LLM agents: run `crono-export prime` for a one-screen orientation describing the formats, all subcommands, the date flags, and `jq` recipes.
 
 ## About Cronometer
 

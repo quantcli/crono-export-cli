@@ -2,6 +2,7 @@ package exporter_test
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -154,10 +155,14 @@ func TestClient_Nutrition_CSVToObjects_E2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Nutrition: %v", err)
 	}
-	rows, ok := got.([]map[string]any)
+	tbl, ok := got.(exporter.Table)
 	if !ok {
-		t.Fatalf("Nutrition returned %T, want []map[string]any", got)
+		t.Fatalf("Nutrition returned %T, want exporter.Table", got)
 	}
+	if want := []string{"Date", "Calories", "Protein"}; !reflect.DeepEqual(tbl.Columns, want) {
+		t.Errorf("Columns = %v, want %v (upstream header order)", tbl.Columns, want)
+	}
+	rows := tbl.Rows
 	if len(rows) != 2 {
 		t.Fatalf("got %d rows, want 2", len(rows))
 	}
@@ -183,10 +188,11 @@ func TestClient_Notes_CSVToObjects_E2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Notes: %v", err)
 	}
-	rows, ok := got.([]map[string]any)
+	tbl, ok := got.(exporter.Table)
 	if !ok {
-		t.Fatalf("Notes returned %T, want []map[string]any", got)
+		t.Fatalf("Notes returned %T, want exporter.Table", got)
 	}
+	rows := tbl.Rows
 	if len(rows) != 1 || rows[0]["Note"] != "Slept poorly" {
 		t.Errorf("rows = %+v", rows)
 	}

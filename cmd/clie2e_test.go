@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -169,6 +170,195 @@ func TestCLI_Servings_JSON_E2E(t *testing.T) {
 	}
 	if recs[0]["FoodName"] != "Apple" {
 		t.Errorf("recs[0].FoodName = %v, want Apple", recs[0]["FoodName"])
+	}
+}
+
+// csvRows parses stdout as csv, failing the test if it is not.
+func csvRows(t *testing.T, stdout string) [][]string {
+	t.Helper()
+	r := csv.NewReader(strings.NewReader(stdout))
+	r.FieldsPerRecord = -1
+	rows, err := r.ReadAll()
+	if err != nil {
+		t.Fatalf("stdout is not valid csv: %v\n--- stdout ---\n%s", err, stdout)
+	}
+	return rows
+}
+
+func TestCLI_Nutrition_CSV_E2E(t *testing.T) {
+	f := cronotest.New()
+	defer f.Close()
+	// Upstream column order is deliberately not alphabetical, and the
+	// second row has an empty (null) cell and a quoted comma.
+	f.DailySummaryCSV = "Date,Energy (kcal),Protein (g),Completed,Comment\n" +
+		"2026-05-04,1800,90.50,true,\"rest day, light\"\n" +
+		"2026-05-05,,110,false,\n"
+
+	stdout, stderr, code := runCLI(t, fakeEnv(f),
+		"nutrition", "--since", "2026-05-04", "--until", "2026-05-11", "--format", "csv")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%q", code, stderr)
+	}
+	want := "Date,Energy (kcal),Protein (g),Completed,Comment\n" +
+		"2026-05-04,1800,90.5,true,\"rest day, light\"\n" +
+		"2026-05-05,,110,false,\n"
+	if stdout != want {
+		t.Errorf("stdout:\n%s\nwant:\n%s", stdout, want)
+	}
+	if stderr != "" {
+		t.Errorf("csv should leave stderr empty; got %q", stderr)
+	}
+}
+
+// csv and json are two views of the same rows: same row count, and the
+// csv header is exactly the set of JSON keys.
+func TestCLI_Servings_CSVMatchesJSON_E2E(t *testing.T) {
+	f := cronotest.New()
+	defer f.Close()
+	f.ServingsCSV = strings.Join([]string{
+		`Day,Group,Food Name,Amount,Energy (kcal),Protein (g)`,
+		`2026-05-04,Breakfast,"Yogurt, Greek ""plain""",150 g,78,0.4`,
+		`2026-05-04,Lunch,Crème brûlée 🍮,1 serving,300,5`,
+	}, "\n")
+	env := append(fakeEnv(f), "TZ=America/New_York")
+	args := []string{"servings", "--since", "2026-05-04", "--until", "2026-05-04", "--format"}
+
+	jsonOut, stderr, code := runCLI(t, env, append(args, "json")...)
+	if code != 0 {
+		t.Fatalf("json exit=%d stderr=%q", code, stderr)
+	}
+	var recs []map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &recs); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+
+	csvOut, stderr, code := runCLI(t, env, append(args, "csv")...)
+	if code != 0 {
+		t.Fatalf("csv exit=%d stderr=%q", code, stderr)
+	}
+	rows := csvRows(t, csvOut)
+	if len(rows) != len(recs)+1 {
+		t.Fatalf("csv has %d data rows, json has %d records", len(rows)-1, len(recs))
+	}
+	header := rows[0]
+	if len(header) != len(recs[0]) {
+		t.Errorf("csv has %d columns, json rows have %d keys", len(header), len(recs[0]))
+	}
+	col := map[string]int{}
+	for i, h := range header {
+		if _, ok := recs[0][h]; !ok {
+			t.Errorf("csv column %q is not a JSON key", h)
+		}
+		col[h] = i
+	}
+	if got := rows[1][col["FoodName"]]; got != `Yogurt, Greek "plain"` {
+		t.Errorf("FoodName = %q", got)
+	}
+	if got := rows[2][col["FoodName"]]; got != "Crème brûlée 🍮" {
+		t.Errorf("FoodName = %q", got)
+	}
+	// §2: csv timestamps are in the user's local zone, and here they are
+	// the very string json carries.
+	if got := rows[1][col["RecordedTime"]]; got != "2026-05-04T00:00:00-04:00" || got != recs[0]["RecordedTime"] {
+		t.Errorf("RecordedTime csv=%q json=%v, want 2026-05-04T00:00:00-04:00", got, recs[0]["RecordedTime"])
+	}
+	// Unlike markdown, zero-valued nutrients are kept.
+	if got := rows[1][col["FatG"]]; got != "0" {
+		t.Errorf("FatG = %q, want 0", got)
+	}
+	if got := rows[1][col["ProteinG"]]; got != "0.4" {
+		t.Errorf("ProteinG = %q, want 0.4", got)
+	}
+}
+
+// §4 empty result: exit 0, a header row and no data rows, for every
+// subcommand — both when Cronometer returns a header-only body and when
+// the window is inverted and no request is made at all.
+func TestCLI_CSV_EmptyResultIsHeaderOnly(t *testing.T) {
+	f := cronotest.New()
+	defer f.Close()
+	f.ServingsCSV = "Day,Group,Food Name,Amount,Energy (kcal)\n"
+	f.ExercisesCSV = "Day,Exercise,Minutes,Calories Burned,Group\n"
+	f.BiometricsCSV = "Day,Metric,Unit,Amount\n"
+	f.DailySummaryCSV = "Date,Energy (kcal),Completed\n"
+	f.NotesCSV = "Day,Group,Note\n"
+
+	wantHeader := map[string]string{
+		"biometrics": "RecordedTime,Metric,Amount,Unit",
+		"exercises":  "RecordedTime,Exercise,Minutes,CaloriesBurned,Group",
+		"nutrition":  "Date,Energy (kcal),Completed",
+		"notes":      "Day,Group,Note",
+	}
+	// With no request made, nutrition/notes cannot know Cronometer's
+	// header and fall back to their identifying columns.
+	wantInverted := map[string]string{
+		"nutrition": "Date",
+		"notes":     "Day,Note",
+	}
+	for _, sub := range []string{"biometrics", "exercises", "nutrition", "servings", "notes"} {
+		t.Run(sub+"/no-rows", func(t *testing.T) {
+			stdout, stderr, code := runCLI(t, fakeEnv(f), sub, "--since", "2026-05-04", "--until", "2026-05-04", "--format", "csv")
+			if code != 0 {
+				t.Fatalf("exit=%d stderr=%q", code, stderr)
+			}
+			rows := csvRows(t, stdout)
+			if len(rows) != 1 {
+				t.Fatalf("want exactly a header row, got %d rows: %q", len(rows), stdout)
+			}
+			if want, ok := wantHeader[sub]; ok && stdout != want+"\n" {
+				t.Errorf("stdout = %q, want %q", stdout, want+"\n")
+			}
+			if sub == "servings" && !strings.HasPrefix(stdout, "RecordedTime,Group,FoodName,QuantityValue,QuantityUnits,Category,EnergyKcal,") {
+				t.Errorf("servings header = %q", stdout)
+			}
+		})
+		t.Run(sub+"/inverted-window", func(t *testing.T) {
+			before := len(f.ExportRequests)
+			stdout, stderr, code := runCLI(t, fakeEnv(f), sub, "--since", "2026-05-05", "--until", "2026-05-04", "--format", "csv")
+			if code != 0 {
+				t.Fatalf("exit=%d stderr=%q", code, stderr)
+			}
+			if len(f.ExportRequests) != before {
+				t.Errorf("inverted window should not call Cronometer")
+			}
+			if rows := csvRows(t, stdout); len(rows) != 1 {
+				t.Fatalf("want exactly a header row, got %d rows: %q", len(rows), stdout)
+			}
+			want, ok := wantInverted[sub]
+			if !ok {
+				want = wantHeader[sub]
+			}
+			if want != "" && stdout != want+"\n" {
+				t.Errorf("stdout = %q, want %q", stdout, want+"\n")
+			}
+		})
+	}
+}
+
+// Every surface that names the formats must name csv: the flag help,
+// the bad-value error, prime, and the root help. The root help must
+// also point at `auth status` (issue #22).
+func TestCLI_HelpTextListsCSV(t *testing.T) {
+	noCreds := []string{"CRONOMETER_USERNAME=", "CRONOMETER_PASSWORD="}
+	for _, sub := range []string{"biometrics", "exercises", "nutrition", "servings", "notes"} {
+		stdout, _, code := runCLI(t, noCreds, sub, "--help")
+		if code != 0 || !strings.Contains(stdout, "markdown (default, fitdown-style), json, or csv") {
+			t.Errorf("%s --help should list csv (exit=%d): %q", sub, code, stdout)
+		}
+	}
+	_, stderr, code := runCLI(t, noCreds, "nutrition", "--format", "xml")
+	if code == 0 || !strings.Contains(stderr, "use markdown, json, or csv") {
+		t.Errorf("bad --format error should list csv (exit=%d): %q", code, stderr)
+	}
+	prime, _, _ := runCLI(t, noCreds, "prime")
+	if !strings.Contains(prime, "--format markdown (default), json, or csv") {
+		t.Errorf("prime should list csv: %q", prime)
+	}
+	root, _, _ := runCLI(t, noCreds, "--help")
+	for _, want := range []string{"--format csv", "crono-export auth status", "crono-export prime"} {
+		if !strings.Contains(root, want) {
+			t.Errorf("root --help should mention %q: %q", want, root)
+		}
 	}
 }
 

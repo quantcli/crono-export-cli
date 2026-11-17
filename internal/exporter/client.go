@@ -3,6 +3,7 @@ package exporter
 import (
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -136,9 +137,32 @@ func (c *Client) Biometrics(ctx context.Context, rng DateRange) (any, error) {
 	return recs, nil
 }
 
-// Nutrition returns daily-totals nutrition rows.  cronoapi does not
-// expose a typed parser for this endpoint, so we hand back a list of
-// string-keyed objects derived from the raw CSV header.  Values are
+// Table is a header-keyed Cronometer export (nutrition, notes) parsed
+// into rows. cronoapi has no typed parser for these endpoints, so the
+// column set is whatever Cronometer's CSV header carried.
+//
+// Rows are string-keyed objects, which is all the json and markdown
+// codecs need. Columns keeps the upstream header order, which a Go map
+// cannot — the csv codec needs it to emit a stable header row, and to
+// emit one at all when the window holds no rows.
+//
+// A Table marshals to JSON as the bare array of its Rows, so adding
+// Columns did not change the --format json shape.
+type Table struct {
+	Columns []string
+	Rows    []map[string]any
+}
+
+// MarshalJSON emits the rows as a JSON array; `[]` when there are none
+// (CONTRACT §4 empty-result rule), never `null`.
+func (t Table) MarshalJSON() ([]byte, error) {
+	if t.Rows == nil {
+		return []byte("[]"), nil
+	}
+	return json.Marshal(t.Rows)
+}
+
+// Nutrition returns daily-totals nutrition rows as a Table.  Values are
 // best-effort coerced (numeric → float64, true/false → bool, empty → null).
 func (c *Client) Nutrition(ctx context.Context, rng DateRange) (any, error) {
 	raw, err := callWithRetry(c, ctx, func() (string, error) {
@@ -147,11 +171,11 @@ func (c *Client) Nutrition(ctx context.Context, rng DateRange) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("export nutrition: %w", err)
 	}
-	rows, err := csvToJSON(raw)
+	t, err := csvToTable(raw)
 	if err != nil {
 		return nil, fmt.Errorf("parse nutrition csv: %w", err)
 	}
-	return rows, nil
+	return t, nil
 }
 
 // Notes returns user-entered notes.  Same shape as Nutrition.
@@ -162,24 +186,36 @@ func (c *Client) Notes(ctx context.Context, rng DateRange) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("export notes: %w", err)
 	}
-	rows, err := csvToJSON(raw)
+	t, err := csvToTable(raw)
 	if err != nil {
 		return nil, fmt.Errorf("parse notes csv: %w", err)
 	}
-	return rows, nil
+	return t, nil
 }
 
-func csvToJSON(raw string) ([]map[string]any, error) {
+// csvToTable parses a raw Cronometer CSV body into a Table. A repeated
+// header name appears once in Columns (first position wins): the row
+// objects can only hold one value per key, so the column list has to
+// agree with them.
+func csvToTable(raw string) (Table, error) {
 	r := csv.NewReader(strings.NewReader(raw))
 	r.FieldsPerRecord = -1
 	rows, err := r.ReadAll()
 	if err != nil {
-		return nil, err
+		return Table{}, err
 	}
 	if len(rows) == 0 {
-		return []map[string]any{}, nil
+		return Table{Rows: []map[string]any{}}, nil
 	}
 	header := rows[0]
+	cols := make([]string, 0, len(header))
+	seen := make(map[string]bool, len(header))
+	for _, col := range header {
+		if !seen[col] {
+			seen[col] = true
+			cols = append(cols, col)
+		}
+	}
 	out := make([]map[string]any, 0, len(rows)-1)
 	for _, row := range rows[1:] {
 		obj := make(map[string]any, len(header))
@@ -192,7 +228,13 @@ func csvToJSON(raw string) ([]map[string]any, error) {
 		}
 		out = append(out, obj)
 	}
-	return out, nil
+	return Table{Columns: cols, Rows: out}, nil
+}
+
+// csvToJSON is csvToTable without the column order.
+func csvToJSON(raw string) ([]map[string]any, error) {
+	t, err := csvToTable(raw)
+	return t.Rows, err
 }
 
 // coerceCSVValue best-effort-parses a CSV cell into a typed value: empty

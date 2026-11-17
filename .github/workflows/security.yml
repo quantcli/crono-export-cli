@@ -1,19 +1,67 @@
-# security.yml v1 — source of truth: quantcli/common; sync changes to every *-export-cli.
+# security.yml v3 — source of truth: quantcli/common; sync changes to every *-export-cli.
 # Bump the version when this workflow changes materially; a future drift-check job will key off it.
-# See quantcli/common CONTRIBUTING.md "Supply-chain and security" for the propagation policy and
-# the >5-repos switchover trigger to a reusable workflow_call.
+# See quantcli/common CONTRIBUTING.md "Supply-chain and security" for the propagation policy and the >5-repos
+# switchover trigger to a reusable workflow_call.
 
 name: security
 
 # Supply-chain and license-policy gate for quantcli repos.
 # Source of truth lives in quantcli/common; export-clis carry a copy of this file.
 # When updating, propagate the change to every *-export-cli repo (see CONTRIBUTING.md).
+#
+# Module discovery (one rule, applied by every job):
+#
+#   This file is copied verbatim into repos with different shapes. The export-clis
+#   have a single module at the repository root; quantcli/common has none there and
+#   one under compat/. Earlier versions probed `[ -f go.mod ]` at the root only, so
+#   in `common` all three jobs took the skip branch and the workflow reported green
+#   for months without scanning anything.
+#
+#   So each job discovers modules by walking the tree, and treats "no module found"
+#   as a failure rather than a skip. Every quantcli repo is Go; a repo where
+#   discovery finds nothing is a bug in the detection, not an empty repo. That hard
+#   failure is the regression check for the bug above — it is what would have caught
+#   the silent-skip state.
+#
+# Go-version policy (one rule, two consequences — the jobs below look inconsistent
+# on purpose):
+#
+#   A toolchain that ANALYSES our code must match the version we ship, because the
+#   result depends on it — govulncheck reports stdlib vulnerabilities relative to
+#   the toolchain it analyses with, so scanning under a newer Go would silently
+#   clear stdlib vulns that are still present in what we release. Those jobs use
+#   `go-version-file` pointed at a discovered go.mod.
+#
+#   A toolchain that merely BUILDS a scanner must not be constrained by our pin.
+#   Scanner modules move their own `go` directive ahead of ours (as of 2026-11-13:
+#   osv-scanner needs go >= 1.27.3, x/vuln needs >= 1.26.0, the export-clis pin
+#   1.26.10). setup-go exports GOTOOLCHAIN=local, which disables Go's automatic
+#   toolchain upgrade, so a `go install` of a tool that outruns our pin hard-fails.
+#
+# So: the osv-scanner job reads go.mod/go.sum as lockfiles and never analyses our
+# code, so it is free to use `go-version: stable`. The two jobs that do analyse our
+# code stay pinned to a discovered go.mod and scope `GOTOOLCHAIN: auto` to the
+# install step only, which lets the tool build self-upgrade without changing the
+# version used to scan.
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  # Daily re-scan. A new advisory landing in the Go vuln DB does not change our
+  # code, so push/pull_request alone never re-checks a repo that has no commit
+  # traffic — detection would depend on commit activity, which is unrelated to
+  # whether we are vulnerable. Offset minute avoids on-the-hour GitHub congestion.
+  # Note: GitHub only runs `schedule` from the default branch, and auto-disables
+  # scheduled workflows in a public repo after 60 days with no repository
+  # activity — silently, as far as this file is concerned. That is watched from
+  # quantcli/common by .github/workflows/scan-freshness.yml, which goes red if
+  # any repo's security.yml is disabled, missing, or has not completed a
+  # successful run on its default branch within 48h. See SECURITY.md
+  # "Scan freshness monitoring".
+  schedule:
+    - cron: '17 6 * * *'
   workflow_dispatch:
 
 # Default-deny at workflow level; each job re-grants only what it needs.
@@ -29,30 +77,87 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
-      - name: Detect Go module
+      - name: Discover Go modules
         id: detect
+        shell: bash
         run: |
-          if [ -f go.mod ]; then
-            echo "has_go=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_go=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No go.mod present; skipping govulncheck."
+          set -euo pipefail
+          # Exclusions: .git holds no buildable source; vendor/ and testdata/ contain
+          # go.mod files belonging to other modules or to fixtures, which are not ours
+          # to scan. `%P` prints the path with the leading './' already stripped.
+          mapfile -t modfiles < <(
+            find . -name go.mod \
+              -not -path './.git/*' \
+              -not -path '*/vendor/*' \
+              -not -path '*/testdata/*' \
+              -printf '%P\n' | sort
+          )
+
+          if [ "${#modfiles[@]}" -eq 0 ]; then
+            echo "::error::No go.mod found anywhere in this repository. Every quantcli repo is Go, so this means module discovery is broken, not that there is nothing to scan. Do not downgrade this to a skip — that is the bug this check exists to catch (QUA-83)."
+            exit 1
           fi
 
+          echo "Discovered ${#modfiles[@]} Go module(s):"
+          printf '  %s\n' "${modfiles[@]}"
+
+          # setup-go accepts exactly one go-version-file, so pick the module with the
+          # highest `go` directive: a toolchain older than that could not build it,
+          # whereas a newer one builds every other discovered module fine.
+          version_file=$(
+            for f in "${modfiles[@]}"; do
+              printf '%s %s\n' "$(awk '$1 == "go" { print $2; exit }' "$f")" "$f"
+            done | sort -V -k1,1 | tail -1 | cut -d' ' -f2
+          )
+          echo "Using go-version-file: ${version_file}"
+
+          {
+            echo "modules<<MODULES_EOF"
+            printf '%s\n' "${modfiles[@]}"
+            echo "MODULES_EOF"
+            echo "go-version-file=${version_file}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Set up Go
-        if: steps.detect.outputs.has_go == 'true'
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
-          go-version-file: go.mod
+          go-version-file: ${{ steps.detect.outputs.go-version-file }}
+          # The discovered go.mod is listed first so this always resolves to at
+          # least one real file: quantcli/common has no go.sum at all (compat/ has
+          # no external dependencies), and setup-go fails outright when nothing in
+          # cache-dependency-path matches. The go.sum glob still keys the cache on
+          # the lockfile in the repos that have one.
+          cache-dependency-path: |
+            ${{ steps.detect.outputs.go-version-file }}
+            **/go.sum
           cache: true
 
       - name: Install govulncheck
-        if: steps.detect.outputs.has_go == 'true'
+        # Tool build only — see "Go-version policy" at the top of this file.
+        # Scoped to this step so `Run govulncheck` below still analyses with our pin.
+        env:
+          GOTOOLCHAIN: auto
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: Run govulncheck
-        if: steps.detect.outputs.has_go == 'true'
-        run: govulncheck ./...
+        shell: bash
+        # The module list reaches the script through the environment, never through
+        # `${{ }}` interpolation into the script body: discovered paths derive from
+        # repository contents, which a pull request controls, and splicing those into
+        # `run:` would be a command-injection sink.
+        env:
+          MODULES: ${{ steps.detect.outputs.modules }}
+        run: |
+          set -uo pipefail
+          failed=0
+          while IFS= read -r modfile; do
+            [ -z "$modfile" ] && continue
+            moddir=$(dirname "$modfile")
+            echo "::group::govulncheck ${moddir}"
+            ( cd "$moddir" && govulncheck ./... ) || failed=1
+            echo "::endgroup::"
+          done <<< "$MODULES"
+          exit "$failed"
 
   osv-scanner:
     name: osv-scanner (transitive vulns)
@@ -63,33 +168,51 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
-      - name: Detect Go module
+      - name: Discover Go modules
         id: detect
+        shell: bash
         run: |
-          # osv-scanner exits non-zero with "No package sources found" if there is
-          # nothing to scan. The quantcli org is Go-only today, so gate on go.mod.
-          # If a non-Go manifest (package.json, requirements.txt, Cargo.toml, …) is
-          # ever introduced, broaden this check.
-          if [ -f go.mod ]; then
-            echo "has_manifests=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_manifests=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No go.mod found; skipping osv-scanner."
+          set -euo pipefail
+          # osv-scanner walks the tree itself, so this step does not need to emit a
+          # module list — it exists to fail the job when there is nothing to scan.
+          # Without it, `osv-scanner scan source` exits non-zero with "No package
+          # sources found" and the cause reads like a tool error rather than a
+          # discovery bug. The quantcli org is Go-only today; if a non-Go manifest
+          # (package.json, requirements.txt, Cargo.toml, …) is ever introduced,
+          # broaden this check.
+          mapfile -t modfiles < <(
+            find . -name go.mod \
+              -not -path './.git/*' \
+              -not -path '*/vendor/*' \
+              -not -path '*/testdata/*' \
+              -printf '%P\n' | sort
+          )
+
+          if [ "${#modfiles[@]}" -eq 0 ]; then
+            echo "::error::No go.mod found anywhere in this repository. Every quantcli repo is Go, so this means module discovery is broken, not that there is nothing to scan. Do not downgrade this to a skip — that is the bug this check exists to catch (QUA-83)."
+            exit 1
           fi
 
+          echo "Discovered ${#modfiles[@]} Go module(s):"
+          printf '  %s\n' "${modfiles[@]}"
+
       - name: Set up Go
-        if: steps.detect.outputs.has_manifests == 'true'
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
+          # Deliberately `stable`, not a discovered `go-version-file` like the other
+          # two jobs — see "Go-version policy" at the top of this file. osv-scanner
+          # parses go.mod/go.sum as lockfiles and never builds or analyses our code,
+          # so our pin cannot affect the scan result; this toolchain exists only to
+          # build the scanner, whose own `go` directive runs ahead of ours.
           go-version: stable
           cache: false
 
       - name: Install osv-scanner
-        if: steps.detect.outputs.has_manifests == 'true'
         run: go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest
 
       - name: Run osv-scanner
-        if: steps.detect.outputs.has_manifests == 'true'
+        # `--recursive .` already descends into every module, so this one invocation
+        # covers both repo shapes without iterating the discovered list.
         run: osv-scanner scan source --recursive .
 
   license-policy:
@@ -106,36 +229,69 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
-      - name: Detect Go module
+      - name: Discover Go modules
         id: detect
-        run: |
-          if [ -f go.mod ]; then
-            echo "has_go=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_go=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No go.mod present; skipping license-policy check."
-          fi
-
-      - name: Set up Go
-        if: steps.detect.outputs.has_go == 'true'
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Install go-licenses
-        if: steps.detect.outputs.has_go == 'true'
-        run: go install github.com/google/go-licenses@latest
-
-      - name: Check licenses against allowlist
-        if: steps.detect.outputs.has_go == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          report=$(mktemp)
-          # go-licenses csv emits: module,license-url,license-id (one per line).
-          # Warnings (e.g. license-url not found) go to stderr and are non-fatal here.
-          go-licenses csv ./... > "$report"
+          mapfile -t modfiles < <(
+            find . -name go.mod \
+              -not -path './.git/*' \
+              -not -path '*/vendor/*' \
+              -not -path '*/testdata/*' \
+              -printf '%P\n' | sort
+          )
+
+          if [ "${#modfiles[@]}" -eq 0 ]; then
+            echo "::error::No go.mod found anywhere in this repository. Every quantcli repo is Go, so this means module discovery is broken, not that there is nothing to scan. Do not downgrade this to a skip — that is the bug this check exists to catch (QUA-83)."
+            exit 1
+          fi
+
+          echo "Discovered ${#modfiles[@]} Go module(s):"
+          printf '  %s\n' "${modfiles[@]}"
+
+          version_file=$(
+            for f in "${modfiles[@]}"; do
+              printf '%s %s\n' "$(awk '$1 == "go" { print $2; exit }' "$f")" "$f"
+            done | sort -V -k1,1 | tail -1 | cut -d' ' -f2
+          )
+          echo "Using go-version-file: ${version_file}"
+
+          {
+            echo "modules<<MODULES_EOF"
+            printf '%s\n' "${modfiles[@]}"
+            echo "MODULES_EOF"
+            echo "go-version-file=${version_file}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: ${{ steps.detect.outputs.go-version-file }}
+          # The discovered go.mod is listed first so this always resolves to at
+          # least one real file: quantcli/common has no go.sum at all (compat/ has
+          # no external dependencies), and setup-go fails outright when nothing in
+          # cache-dependency-path matches. The go.sum glob still keys the cache on
+          # the lockfile in the repos that have one.
+          cache-dependency-path: |
+            ${{ steps.detect.outputs.go-version-file }}
+            **/go.sum
+          cache: true
+
+      - name: Install go-licenses
+        # Tool build only — see "Go-version policy" at the top of this file.
+        env:
+          GOTOOLCHAIN: auto
+        run: go install github.com/google/go-licenses@latest
+
+      - name: Check licenses against allowlist
+        shell: bash
+        # See the note in the govulncheck job: PR-controlled paths travel by
+        # environment, not by `${{ }}` interpolation into the script body.
+        env:
+          MODULES: ${{ steps.detect.outputs.modules }}
+        run: |
+          set -uo pipefail
 
           IFS=',' read -ra ALLOWED <<< "$ALLOWED_LICENSES"
           is_allowed() {
@@ -147,13 +303,38 @@ jobs:
           }
 
           bad=0
-          while IFS=',' read -r module url license; do
-            [ -z "$module" ] && continue
-            if ! is_allowed "$license"; then
-              echo "::error::Disallowed license: module=$module license=$license"
+          while IFS= read -r modfile; do
+            [ -z "$modfile" ] && continue
+            moddir=$(dirname "$modfile")
+            echo "::group::license policy ${moddir}"
+            report=$(mktemp)
+
+            # `--ignore <module path>` drops the module's own packages from the
+            # report. They are not dependencies, and go-licenses cannot resolve them
+            # when the LICENSE file sits above the module root — which is the case
+            # for quantcli/common, where the module is compat/ and the licence is at
+            # the repository root. (The published module zip does carry the licence:
+            # the module proxy copies it down from enclosing directories. The gap is
+            # in the working tree only, so it is a scanner artefact, not a
+            # distribution defect.) Without this, our own packages report as
+            # "Unknown" and trip the allowlist.
+            #
+            # go-licenses csv emits: module,license-url,license-id (one per line).
+            # Warnings (e.g. license-url not found) go to stderr and are non-fatal here.
+            if ! ( cd "$moddir" && go-licenses csv ./... --ignore "$(go list -m)" ) > "$report"; then
+              echo "::error::go-licenses failed for ${moddir}; treating as a policy failure."
               bad=1
             fi
-          done < "$report"
+
+            while IFS=',' read -r module url license; do
+              [ -z "$module" ] && continue
+              if ! is_allowed "$license"; then
+                echo "::error::Disallowed license: module=$module license=$license"
+                bad=1
+              fi
+            done < "$report"
+            echo "::endgroup::"
+          done <<< "$MODULES"
 
           if [ "$bad" -ne 0 ]; then
             echo "::error::License policy violated. Allowlist: ${ALLOWED_LICENSES}"

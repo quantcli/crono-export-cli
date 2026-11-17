@@ -58,8 +58,10 @@ WHAT IT IS
   biometrics (weight/fat/BP/...), exercises, and notes.
 
 I/O
-  stdout: data in --format markdown (default) or json.
+  stdout: data in --format markdown (default), json, or csv.
   stderr: errors. Exit 0 on success including empty results.
+  csv: header row (always, even with no rows), then one row per JSON
+    array element. Columns are the JSON keys; null is an empty cell.
 
 AUTH
   Env-var credentials (always required):
@@ -97,7 +99,8 @@ GOTCHAS
   - 'today' is your LOCAL calendar day, not UTC.
   - 'RecordedTime' is date-only (midnight in your local zone); Cronometer's
     CSV exports don't carry meal-time, so all times sort as 00:00.
-  - Markdown drops zero-valued nutrients; use --format json for every column.
+  - Markdown drops zero-valued nutrients; use --format json or csv for every
+    column.
   - 'servings' rows have a 'Day' field that is always null — use 'RecordedTime'.
 ```
 
@@ -119,7 +122,7 @@ crono-export nutrition --since 7d
 ...
 ```
 
-*Note: actual column set is wider (full micro/macronutrient breakdown). Rows with all-zero values for a nutrient are omitted in markdown; use `--format json` for every column.*
+*Note: actual column set is wider (full micro/macronutrient breakdown). Rows with all-zero values for a nutrient are omitted in markdown; use `--format json` or `--format csv` for every column.*
 
 To get JSON for scripting:
 
@@ -177,7 +180,7 @@ Error on stderr, nothing on stdout, exit 1. Matches CONTRACT.md §3.
 git clone https://github.com/quantcli/crono-export-cli
 cd crono-export-cli
 go build -o /tmp/crono-export .
-EXPORT_CLI_BIN=/tmp/crono-export go test -tags=compat ./...
+CRONO_EXPORT_BIN=/tmp/crono-export go test -tags=compat ./...
 ```
 
 **Expected:**
@@ -188,7 +191,7 @@ ok      github.com/quantcli/crono-export-cli/cmd    0.005s
 ...
 ```
 
-All green. The `compat` suite covers CONTRACT.md §3 (date flags, hermetic `--help`) and §7 (hermeticity). Data-path subtests (`--format json` against live Cronometer) require real credentials; the parse-level subtests run without them.
+All green. The `compat` suite covers CONTRACT.md §3 (date flags, hermetic `--help`) and §7 (hermeticity). The §4 data-path subtests (`--format json`, `--format csv`, default-is-markdown) run against an in-process fake Cronometer, so no credentials are needed.
 
 ---
 

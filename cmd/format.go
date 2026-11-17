@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/quantcli/crono-export-cli/internal/cronoapi"
+	"github.com/quantcli/crono-export-cli/internal/exporter"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +29,7 @@ const (
 // https://github.com/quantcli/common/blob/main/CONTRACT.md#4-output-format
 func AddFormatFlags(cmd *cobra.Command) {
 	cmd.Flags().String("format", "markdown",
-		"Output format: markdown (default, fitdown-style) or json")
+		"Output format: markdown (default, fitdown-style), json, or csv")
 }
 
 // ValidateExportFlags is a PreRunE that fails fast on bad --format or date
@@ -48,22 +49,27 @@ func chosenFormat(cmd *cobra.Command) (string, error) {
 		return "markdown", nil
 	case "json":
 		return "json", nil
+	case "csv":
+		return "csv", nil
 	default:
-		return "", fmt.Errorf("unknown --format %q (use markdown or json)", f)
+		return "", fmt.Errorf("unknown --format %q (use markdown, json, or csv)", f)
 	}
 }
 
 // emit writes v in the format chosen on cmd.  kind tells the markdown
-// renderer which layout to use.
+// and csv renderers which layout to use.
 func emit(cmd *cobra.Command, kind recordKind, v any) error {
 	f, err := chosenFormat(cmd)
 	if err != nil {
 		return err
 	}
-	if f == "json" {
+	switch f {
+	case "json":
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(v)
+	case "csv":
+		return renderCSV(os.Stdout, kind, v)
 	}
 	return renderMarkdown(os.Stdout, kind, v)
 }
@@ -80,11 +86,11 @@ func renderMarkdown(w io.Writer, kind recordKind, v any) error {
 		recs, _ := v.(cronoapi.ExerciseRecords)
 		return renderExercises(w, recs)
 	case kindNutrition:
-		rows, _ := v.([]map[string]any)
-		return renderNutrition(w, rows)
+		t, _ := v.(exporter.Table)
+		return renderNutrition(w, t.Rows)
 	case kindNotes:
-		rows, _ := v.([]map[string]any)
-		return renderNotes(w, rows)
+		t, _ := v.(exporter.Table)
+		return renderNotes(w, t.Rows)
 	}
 	return fmt.Errorf("renderMarkdown: unknown kind %d", kind)
 }
@@ -111,7 +117,7 @@ func emptyValueFor(kind recordKind) any {
 	case kindExercises:
 		return cronoapi.ExerciseRecords{}
 	case kindNutrition, kindNotes:
-		return []map[string]any{}
+		return exporter.Table{}
 	}
 	return nil
 }

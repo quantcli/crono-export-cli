@@ -54,8 +54,6 @@ on:
   # daily cron would only have caught up after it merged — the wrong end of the merge.
   # `push` stays pinned to main because that is where "did the merged state scan
   # clean" is decided.
-  # Enforced in quantcli/common by tools/workflowtriggers, whose tests fail if any
-  # workflow there filters pull_request by base branch again.
   pull_request:
   # Daily re-scan. A new advisory landing in the Go vuln DB does not change our
   # code, so push/pull_request alone never re-checks a repo that has no commit

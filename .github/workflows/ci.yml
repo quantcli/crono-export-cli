@@ -3,8 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
+  # Every pull request, whatever its base. With `branches: [main]` a PR stacked on
+  # another PR's branch got no CI at all — not a red check, an absent one — so code
+  # could reach main through a chain where it was never linted or tested on its own
+  # (QUA-115). `push` stays pinned to main: that trigger answers "is the merged state
+  # green", which is a question about main.
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read

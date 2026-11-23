@@ -47,8 +47,14 @@ name: security
 on:
   push:
     branches: [main]
+  # Every pull request, whatever its base. With `branches: [main]` a PR stacked on
+  # another PR's branch got no scan at all — not a red check, an absent one, on a PR
+  # page that looked clean. A go.mod bump went through review that way (QUA-113)
+  # without govulncheck, osv-scanner or the licence allowlist ever seeing it, and the
+  # daily cron would only have caught up after it merged — the wrong end of the merge.
+  # `push` stays pinned to main because that is where "did the merged state scan
+  # clean" is decided.
   pull_request:
-    branches: [main]
   # Daily re-scan. A new advisory landing in the Go vuln DB does not change our
   # code, so push/pull_request alone never re-checks a repo that has no commit
   # traffic — detection would depend on commit activity, which is unrelated to

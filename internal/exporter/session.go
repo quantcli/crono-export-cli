@@ -101,6 +101,14 @@ func saveCachedSession(user string, snap cronoapi.Session) error {
 	return os.WriteFile(p, data, 0o600)
 }
 
+// HasUsableCachedSession reports whether the persisted session is usable
+// for user.  Exported so the `auth status` subcommand can invoke it.
+// I/O errors are treated as no usable cache, matching the login path.
+func HasUsableCachedSession(user string) bool {
+	cached, err := loadCachedSession(user)
+	return err == nil && cached != nil
+}
+
 // DeleteCachedSession removes the on-disk session file.  Exported so
 // the `auth logout` subcommand can invoke it.  Returns nil if the
 // cache didn't exist.

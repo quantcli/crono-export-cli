@@ -20,10 +20,11 @@ var authStatusCmd = &cobra.Command{
 	Long: `Print a one-line summary of whether the CLI has the credentials it needs
 to talk to Cronometer. Exit code 0 if usable, 1 if missing.
 
-This is a local check — no network call. It only verifies the
-CRONOMETER_USERNAME and CRONOMETER_PASSWORD environment variables are set.
-The CLI logs in fresh on every invocation, so a successful status here is
-necessary but not sufficient: a wrong password will still fail at run time.
+This is a local check — no network call. It verifies that the
+CRONOMETER_USERNAME and CRONOMETER_PASSWORD environment variables are set
+and reports whether a usable cached session exists.
+A successful status here is necessary but not sufficient: a wrong
+password will still fail at run time.
 
 Per the quantcli shared contract:
 https://github.com/quantcli/common/blob/main/CONTRACT.md#5-auth`,
@@ -41,10 +42,10 @@ https://github.com/quantcli/common/blob/main/CONTRACT.md#5-auth`,
 		cacheState := "no cache"
 		if os.Getenv("CRONOMETER_NO_CACHE") == "" {
 			if p := exporter.SessionCachePath(); p != "" {
-				if _, err := os.Stat(p); err == nil {
-					cacheState = "session cached"
+				if exporter.HasUsableCachedSession(user) {
+					cacheState = "valid cached session"
 				} else {
-					cacheState = "no session cached"
+					cacheState = "no usable cached session"
 				}
 			}
 		} else {
